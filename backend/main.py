@@ -1,47 +1,64 @@
-
 import os
-import requests
+from fastapi import FastAPI, Body
+from pydantic import BaseModel
+from typing import Optional
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from openai import OpenAI
 
-load_dotenv()  # loads backend/.env if you run uvicorn from backend/
-
+load_dotenv()
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 app = FastAPI()
 
-BETFAIR_APP_KEY = os.getenv("BETFAIR_APP_KEY")
-BETFAIR_SESSION_TOKEN = os.getenv("BETFAIR_SESSION_TOKEN")
-BETFAIR_ENDPOINT = "https://api.betfair.com/exchange/betting/rest/v1.0/"
+class BetRequest(BaseModel):
+    user_input: str
 
-def betfair_post(path: str, payload: dict):
-    if not BETFAIR_APP_KEY or not BETFAIR_SESSION_TOKEN:
-        raise HTTPException(status_code=500, detail="Betfair credentials not configured")
+class ParsedBet(BaseModel):
+    selection_name: str
+    side: str
+    stake: float
+    price: Optional[float]
+    market_type: str
 
-    headers = {
-        "X-Application": BETFAIR_APP_KEY,
-        "X-Authentication": BETFAIR_SESSION_TOKEN,
-        "Content-Type": "application/json",
-    }
+#Routes 
+@app.post("/api/interpret", response_model=ParsedBet)
+def interpret_bet(request: BetRequest):
+
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        temperature=0,
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "You extract structured betting instructions. "
+                    "Return ONLY valid JSON. No explanation."
+                )
+            },
+            {
+                "role": "user",
+                "content": f"""
+Convert the following betting instruction into JSON with fields:
+- selection_name (string)
+- side (must be BACK or LAY)
+- stake (number)
+- price (number or null)
+- market_type (always set to "MATCH_ODDS")
+
+User input:
+"{request.user_input}"
+"""
+            }
+        ],
+    )
+
+    content = response.choices[0].message.content
+    if content is None:
+        raise ValueError("AI returned empty response")
+    ai_output = content.strip()
 
 
-    url = BETFAIR_ENDPOINT + path
-    try:
-        r = requests.post(url, json=payload, headers=headers, timeout=10)
-        r.raise_for_status()
-        return r.json()
-    except requests.RequestException as e:
-        raise HTTPException(status_code=502, detail=f"Betfair request failed: {e}")
-    r = requests.post(url, json={"filter": {}}, headers=headers, timeout=10)
-    print("STATUS:", r.status_code)
-    print("BODY:", r.text)
-    r.raise_for_status()
-
-
-@app.get("/api/event-types")
-def event_types():
-    # equivalent of your demo script: listEventTypes with empty filter
-    return betfair_post("listEventTypes/", {"filter": {}})
-
-print(repr(BETFAIR_SESSION_TOKEN))
+    # Validate AI output against schema
+    return ParsedBet.model_validate_json(ai_output)
 
 
 
