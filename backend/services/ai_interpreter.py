@@ -1,7 +1,7 @@
 import os
 from openai import OpenAI
 from dotenv import load_dotenv
-from backend.schemas.bets import ParsedBet
+from schemas.bets import ParsedBet
 
 load_dotenv()
 

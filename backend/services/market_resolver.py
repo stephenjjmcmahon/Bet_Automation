@@ -1,5 +1,5 @@
 def resolve_selection(runners, selection_name):
-
+    
     selection_name = selection_name.lower()
 
     for runner in runners:

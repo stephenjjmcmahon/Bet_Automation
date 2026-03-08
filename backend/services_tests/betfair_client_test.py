@@ -36,10 +36,5 @@ print(markets)
 # Step 4: Extract runners
 runners = markets[0]["runners"]
 
-# Step 5: Resolve selection
-selection_id = resolve_selection(runners, "Arsenal")
-
-print("\nResolved selectionId:")
-print(selection_id)
 
 print("\nTEST COMPLETE")
