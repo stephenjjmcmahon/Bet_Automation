@@ -29,6 +29,7 @@ class AIInterpreter:
                     "content": f"""
 Convert the following betting instruction into JSON with fields:
 - selection_name (string)
+- sport (string)
 - side (must be BACK or LAY)
 - stake (number)
 - price (number or null)

@@ -8,6 +8,7 @@ class BetRequest(BaseModel):
 
 class ParsedBet(BaseModel):
     selection_name: str
+    sport: str
     side: str
     stake: float
     price: Optional[float]
