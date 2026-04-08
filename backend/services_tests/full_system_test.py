@@ -4,9 +4,9 @@ import os
 # allow imports from project
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from services.ai_interpreter import AIInterpreter
-from services.search_service import search_market
-from services.betslips_service import create_betslip
+from backend.services.ai_interpreter import AIInterpreter
+from backend.services.search_service import search_market
+from backend.services.betslips_service import create_betslip
 
 
 print("=== SYSTEM TEST STARTED ===")

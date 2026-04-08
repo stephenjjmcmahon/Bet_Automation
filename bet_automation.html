@@ -187,25 +187,48 @@ checkStatus();setInterval(checkStatus,15000);
 
 function fillExample(el){document.getElementById('bet-input').value=el.textContent;document.getElementById('bet-input').focus()}
 
-async function parseBet(){
-  const input=document.getElementById('bet-input').value.trim();
-  if(!input)return;
-  const btn=document.getElementById('parse-btn'),btnTxt=document.getElementById('parse-btn-text'),errEl=document.getElementById('parse-error');
-  btn.disabled=true;btnTxt.textContent='Parsing…';
-  const ic=btn.querySelector('[data-lucide]');if(ic)ic.outerHTML='<span class="spinner"></span>';
-  errEl.innerHTML='';
-  try{
-    const res=await fetch(API+'/api/interpret',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_input:input})});
-    if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.detail||'Failed to parse. Check your input.')}
-    const parsed=await res.json();
-    current={...parsed,originalInput:input};
-    renderSlip(current);
-  }catch(e){
-    errEl.innerHTML=`<div class="banner banner-error" style="margin-top:var(--space-3)"><i data-lucide="alert-circle" class="banner-icon" style="width:16px;height:16px"></i><span>${e.message}</span></div>`;
+function icon(name, size=16) {
+  return `<i data-lucide="${name}" style="width:${size}px;height:${size}px;flex-shrink:0"></i>`;
+}
+
+async function parseBet() {
+  const input = document.getElementById('bet-input').value.trim();
+  if (!input) return;
+  const btn = document.getElementById('parse-btn'), lbl = document.getElementById('parse-btn-text');
+const errEl = document.getElementById('parse-error');
+  btn.disabled = true; lbl.textContent = 'Parsing…';
+  btn.querySelector('[data-lucide]').outerHTML = '<span class="spinner"></span>';
+  errEl.innerHTML = '';
+  try {
+    const res = await fetch(API + '/api/interpret', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ user_input: input })
+    });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || 'Could not parse bet.'); }
+    const data = await res.json();
+
+    if (data.status === 'clarification_needed') {
+      // Show clarification prompt instead of slip
+      errEl.innerHTML = `
+        <div class="banner" style="margin-top:var(--space-3);background:var(--color-primary-highlight);border:1px solid color-mix(in oklch,var(--color-primary) 30%,transparent);color:var(--color-text)">
+          ${icon('help-circle')}
+          <div>
+            <div style="font-weight:600;margin-bottom:4px">Need a bit more info</div>
+            <div>${data.clarification_question}</div>
+          </div>
+        </div>`;
+      lucide.createIcons();
+    } else {
+      current = { ...data.parsed_bet, originalInput: input };
+      renderSlip(current);
+    }
+  } catch(e) {
+    errEl.innerHTML = `<div class="banner banner-err" style="margin-top:var(--space-3)">${icon('alert-circle')}<span>${e.message}</span></div>`;
     lucide.createIcons();
-  }finally{
-    btn.disabled=false;btnTxt.textContent='Parse Bet';
-    const sp=btn.querySelector('.spinner');if(sp)sp.outerHTML='<i data-lucide="zap" style="width:16px;height:16px"></i>';
+  } finally {
+    btn.disabled = false; lbl.textContent = 'Parse Bet';
+    const sp = btn.querySelector('.spinner');
+    if (sp) sp.outerHTML = icon('zap');
     lucide.createIcons();
   }
 }
@@ -296,7 +319,4 @@ document.getElementById('bet-input').addEventListener('keydown',e=>{if((e.metaKe
 lucide.createIcons();
 </script>
 </body>
-</html>""")
-
-print("Written to:", path)
-print("Size:", os.path.getsize(path), "bytes")
+</html>

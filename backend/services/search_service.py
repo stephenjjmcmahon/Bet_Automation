@@ -1,6 +1,6 @@
-from services.betfair_client import list_events, list_market_catalogue
-from services.market_resolver import resolve_selection
-from config.sport_mapping import SPORT_EVENT_TYPE_MAP
+from backend.services.betfair_client import list_events, list_market_catalogue
+from backend.services.market_resolver import resolve_selection
+from backend.config.sport_mapping import SPORT_EVENT_TYPE_MAP
 
 
 def search_market(parsed_bet):

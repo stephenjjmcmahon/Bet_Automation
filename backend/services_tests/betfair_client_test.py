@@ -4,8 +4,8 @@ import os
 # Allow Python to find the services folder
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from services.betfair_client import list_events, list_market_catalogue
-from services.market_resolver import resolve_selection
+from backend.services.betfair_client import list_events, list_market_catalogue
+from backend.services.market_resolver import resolve_selection
 
 print("TEST SCRIPT STARTED")
 
