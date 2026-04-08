@@ -3,6 +3,7 @@ from typing import Optional, Literal
 
 class BetRequest(BaseModel):
     user_input: str
+    stake_override: Optional[float] = None
 
 class ParsedBet(BaseModel):
     selection_name: str

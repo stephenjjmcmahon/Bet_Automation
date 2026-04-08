@@ -18,7 +18,7 @@ def betfair_post(path: str, payload: dict):
     r = requests.post(url, json=payload, headers=headers)
 
     print("STATUS:", r.status_code)
-   # print("RESPONSE:", r.text)
+    print("RESPONSE:", r.text)
 
     r.raise_for_status()
 
@@ -57,3 +57,23 @@ def place_orders(market_id: str, instructions: list):
     }
 
     return betfair_post("placeOrders/", payload)
+
+def get_best_price(market_id: str, selection_id: int, side: str) -> float:
+    payload = {
+        "marketIds": [market_id],
+        "priceProjection": {
+            "priceData": ["EX_BEST_OFFERS"]
+        }
+    }
+    response = betfair_post("listMarketBook/", payload)
+    runners = response[0]["runners"]
+    for runner in runners:
+        if runner["selectionId"] == selection_id:
+            ex = runner.get("ex", {})
+            if side == "BACK":
+                offers = ex.get("availableToBack", [])
+            else:
+                offers = ex.get("availableToLay", [])
+            if offers:
+                return offers[0]["price"]  # Best available price
+    raise ValueError(f"No price available for selection {selection_id}")

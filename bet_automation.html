@@ -17,7 +17,6 @@ html{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;scroll
 body{min-height:100dvh;font-family:var(--font-body);font-size:var(--text-base);color:var(--color-text);background:var(--color-bg);line-height:1.5}
 button{cursor:pointer;background:none;border:none;font:inherit;color:inherit}
 input,textarea,select{font:inherit;color:inherit}
-img{display:block;max-width:100%}
 ::selection{background:oklch(from var(--color-primary) l c h/0.2)}
 :focus-visible{outline:2px solid var(--color-primary);outline-offset:3px;border-radius:var(--radius-sm)}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:0.01ms!important;transition-duration:0.01ms!important}}
@@ -32,7 +31,7 @@ img{display:block;max-width:100%}
 .dot.online{background:var(--color-primary);box-shadow:0 0 0 3px color-mix(in oklch,var(--color-primary) 20%,transparent)}
 .theme-toggle{width:36px;height:36px;display:flex;align-items:center;justify-content:center;border-radius:var(--radius-md);color:var(--color-text-muted);transition:background var(--transition-interactive),color var(--transition-interactive)}
 .theme-toggle:hover{background:var(--color-surface-offset);color:var(--color-text)}
-.main{display:grid;grid-template-columns:1fr 380px;gap:var(--space-6);padding:var(--space-6);max-width:1280px;margin:0 auto;width:100%;align-items:start}
+.main{display:grid;grid-template-columns:1fr 400px;gap:var(--space-6);padding:var(--space-6);max-width:1280px;margin:0 auto;width:100%;align-items:start}
 .panel{background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-xl);overflow:hidden;box-shadow:var(--shadow-sm)}
 .panel-header{padding:var(--space-4) var(--space-5);border-bottom:1px solid var(--color-divider);display:flex;align-items:center;gap:var(--space-2)}
 .panel-title{font-size:var(--text-sm);font-weight:600;color:var(--color-text)}
@@ -41,7 +40,7 @@ img{display:block;max-width:100%}
 .bet-input{width:100%;background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:var(--space-4) var(--space-5);font-size:var(--text-base);color:var(--color-text);resize:none;min-height:80px;transition:border-color var(--transition-interactive),box-shadow var(--transition-interactive);line-height:1.6}
 .bet-input::placeholder{color:var(--color-text-faint)}
 .bet-input:focus{outline:none;border-color:var(--color-primary);box-shadow:0 0 0 3px color-mix(in oklch,var(--color-primary) 15%,transparent)}
-.input-hint{margin-top:var(--space-2);font-size:var(--text-xs);color:var(--color-text-muted);display:flex;gap:var(--space-3);flex-wrap:wrap}
+.input-hint{margin-top:var(--space-2);font-size:var(--text-xs);color:var(--color-text-muted);display:flex;gap:var(--space-3);flex-wrap:wrap;align-items:center}
 .hint-chip{background:var(--color-surface-offset);border:1px solid var(--color-border);border-radius:var(--radius-full);padding:2px var(--space-2);cursor:pointer;transition:background var(--transition-interactive);white-space:nowrap}
 .hint-chip:hover{background:var(--color-divider)}
 .btn-parse{margin-top:var(--space-4);width:100%;background:var(--color-primary);color:var(--color-text-inverse);border-radius:var(--radius-lg);padding:var(--space-3) var(--space-5);font-size:var(--text-sm);font-weight:600;display:flex;align-items:center;justify-content:center;gap:var(--space-2);transition:background var(--transition-interactive),transform var(--transition-interactive)}
@@ -49,7 +48,7 @@ img{display:block;max-width:100%}
 .btn-parse:active{background:var(--color-primary-active);transform:scale(0.99)}
 .btn-parse:disabled{opacity:.5;cursor:not-allowed;transform:none}
 @keyframes spin{to{transform:rotate(360deg)}}
-.spinner{width:16px;height:16px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite}
+.spinner{width:16px;height:16px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
 @keyframes slideUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 .empty-slip{background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-xl);padding:var(--space-10) var(--space-6);display:flex;flex-direction:column;align-items:center;text-align:center;gap:var(--space-3);box-shadow:var(--shadow-sm)}
@@ -57,20 +56,26 @@ img{display:block;max-width:100%}
 .empty-slip h3{font-size:var(--text-sm);font-weight:600;color:var(--color-text)}
 .empty-slip p{font-size:var(--text-xs);color:var(--color-text-muted);max-width:28ch}
 .betslip-card{background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-xl);overflow:hidden;box-shadow:var(--shadow-md);animation:slideUp 220ms cubic-bezier(0.16,1,0.3,1)}
-.slip-header{padding:var(--space-4) var(--space-5);background:var(--color-surface-offset);border-bottom:1px solid var(--color-divider);display:flex;align-items:center;justify-content:space-between}
-.slip-header-left{display:flex;flex-direction:column;gap:2px}
+.slip-header{padding:var(--space-4) var(--space-5);background:var(--color-surface-offset);border-bottom:1px solid var(--color-divider)}
+.slip-header-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-3)}
 .slip-sport-badge{display:inline-flex;align-items:center;gap:var(--space-1);font-size:var(--text-xs);font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--color-primary);background:var(--color-primary-highlight);border-radius:var(--radius-full);padding:2px var(--space-2)}
-.slip-market{font-size:var(--text-xs);color:var(--color-text-muted);margin-top:var(--space-1)}
 .side-badge{font-size:var(--text-xs);font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:var(--space-1) var(--space-3);border-radius:var(--radius-full)}
 .side-back{background:var(--color-blue);color:#fff}
 .side-lay{background:var(--color-gold);color:#fff}
+.slip-event-block{display:flex;flex-direction:column;gap:var(--space-1)}
+.slip-event-name{font-size:var(--text-sm);font-weight:600;color:var(--color-text);line-height:1.3}
+.slip-event-meta{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;margin-top:var(--space-1)}
+.slip-meta-item{display:flex;align-items:center;gap:4px;font-size:var(--text-xs);color:var(--color-text-muted)}
+.slip-market-tag{font-size:var(--text-xs);color:var(--color-text-faint);margin-top:4px;text-transform:uppercase;letter-spacing:.04em}
 .slip-body{padding:var(--space-5);display:flex;flex-direction:column;gap:var(--space-4)}
 .slip-selection{font-size:var(--text-lg);font-weight:700;color:var(--color-text);line-height:1.2}
+.slip-selection-sub{font-size:var(--text-xs);color:var(--color-text-muted);font-weight:400;margin-top:2px}
 .slip-row{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3)}
 .slip-field{display:flex;flex-direction:column;gap:var(--space-1)}
 .slip-field-label{font-size:var(--text-xs);color:var(--color-text-muted);font-weight:500;text-transform:uppercase;letter-spacing:.05em}
 .slip-field-value{font-family:var(--font-mono);font-size:var(--text-base);font-weight:500;color:var(--color-text)}
 .slip-field-value.price{color:var(--color-primary);font-weight:700}
+.price-live-badge{display:inline-flex;align-items:center;gap:4px;font-size:var(--text-xs);background:var(--color-primary-highlight);color:var(--color-primary);border-radius:var(--radius-full);padding:1px 6px;margin-left:6px;font-family:var(--font-body);font-weight:600;letter-spacing:.03em}
 .stake-wrap{position:relative}
 .stake-input{width:100%;background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:var(--space-2) var(--space-3) var(--space-2) var(--space-6);font-family:var(--font-mono);font-size:var(--text-base);font-weight:500;transition:border-color var(--transition-interactive),box-shadow var(--transition-interactive)}
 .stake-input:focus{outline:none;border-color:var(--color-primary);box-shadow:0 0 0 3px color-mix(in oklch,var(--color-primary) 15%,transparent)}
@@ -89,7 +94,6 @@ img{display:block;max-width:100%}
 .banner{border-radius:var(--radius-lg);padding:var(--space-3) var(--space-4);font-size:var(--text-sm);display:flex;align-items:flex-start;gap:var(--space-2);animation:fadeIn 180ms ease}
 .banner-error{background:var(--color-error-highlight);color:var(--color-error);border:1px solid color-mix(in oklch,var(--color-error) 30%,transparent)}
 .banner-success{background:var(--color-success-highlight);color:var(--color-success);border:1px solid color-mix(in oklch,var(--color-success) 30%,transparent)}
-.banner-icon{flex-shrink:0;margin-top:1px}
 .history-table{width:100%;border-collapse:collapse;font-size:var(--text-sm)}
 .history-table th{text-align:left;padding:var(--space-2) var(--space-4);font-size:var(--text-xs);font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--color-text-muted);border-bottom:1px solid var(--color-divider);white-space:nowrap}
 .history-table td{padding:var(--space-3) var(--space-4);border-bottom:1px solid var(--color-divider);vertical-align:middle}
@@ -102,7 +106,7 @@ img{display:block;max-width:100%}
 .status-failed{background:var(--color-error-highlight);color:var(--color-error)}
 .status-pending{background:var(--color-surface-offset);color:var(--color-text-muted)}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border-width:0}
-@media(max-width:768px){.main{grid-template-columns:1fr;padding:var(--space-4);gap:var(--space-4)}.betslip{order:-1}.slip-row{grid-template-columns:1fr}.header{padding:var(--space-3) var(--space-4)}}
+@media(max-width:768px){.main{grid-template-columns:1fr;padding:var(--space-4);gap:var(--space-4)}.slip-row{grid-template-columns:1fr}.header{padding:var(--space-3) var(--space-4)}}
 </style>
 </head>
 <body>
@@ -119,7 +123,7 @@ img{display:block;max-width:100%}
     <div class="header-actions">
       <div class="status-dot">
         <span class="dot" id="status-dot"></span>
-        <span id="status-text">Connecting…</span>
+        <span id="status-text">Connecting...</span>
       </div>
       <button class="theme-toggle" data-theme-toggle aria-label="Toggle theme">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
@@ -131,15 +135,15 @@ img{display:block;max-width:100%}
       <div class="panel">
         <div class="panel-header">
           <i data-lucide="message-square" style="width:16px;height:16px;color:var(--color-text-muted)"></i>
-          <div><div class="panel-title">Place a Bet</div><div class="panel-subtitle">Type your bet in plain English — Cmd+Enter to parse</div></div>
+          <div><div class="panel-title">Place a Bet</div><div class="panel-subtitle">Type your bet in plain English &mdash; Cmd+Enter to parse</div></div>
         </div>
         <div class="panel-body">
-          <textarea class="bet-input" id="bet-input" placeholder="e.g. Chelsea to win £50 at 2.4" rows="3" aria-label="Enter your bet"></textarea>
+          <textarea class="bet-input" id="bet-input" placeholder="e.g. back Man City to win 20" rows="3" aria-label="Enter your bet"></textarea>
           <div class="input-hint">
             <span style="color:var(--color-text-faint)">Try:</span>
-            <span class="hint-chip" onclick="fillExample(this)">Chelsea 50 at 2.4</span>
-            <span class="hint-chip" onclick="fillExample(this)">Back Man United £25 at 3.5</span>
-            <span class="hint-chip" onclick="fillExample(this)">Lay Arsenal 100 at 4.0</span>
+            <span class="hint-chip" onclick="fillExample(this)">back Man City to win 20</span>
+            <span class="hint-chip" onclick="fillExample(this)">Back Man United 25</span>
+            <span class="hint-chip" onclick="fillExample(this)">Lay Arsenal 100</span>
           </div>
           <button class="btn-parse" id="parse-btn" onclick="parseBet()">
             <i data-lucide="zap" style="width:16px;height:16px"></i>
@@ -156,8 +160,8 @@ img{display:block;max-width:100%}
         <div id="history-body"><div class="empty-history">No bets placed this session</div></div>
       </div>
     </div>
-    <aside class="betslip" id="betslip-panel" aria-label="Bet slip">
-      <div class="empty-slip" id="empty-slip">
+    <aside id="betslip-panel" aria-label="Bet slip">
+      <div class="empty-slip">
         <i data-lucide="receipt" style="width:36px;height:36px" class="empty-slip-icon"></i>
         <h3>Bet slip is empty</h3>
         <p>Parse a bet on the left to see your bet slip here</p>
@@ -166,156 +170,272 @@ img{display:block;max-width:100%}
   </main>
 </div>
 <script>
-const API='http://localhost:8000';
-let history=[];
-let current=null;
+const API = 'http://localhost:8000';
+let betHistory = [];
+let current = null;
 
-(function(){
-  const t=document.querySelector('[data-theme-toggle]'),r=document.documentElement;
-  let d=matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';
-  r.setAttribute('data-theme',d);setIcon(t,d);
-  t&&t.addEventListener('click',()=>{d=d==='dark'?'light':'dark';r.setAttribute('data-theme',d);setIcon(t,d)});
-  function setIcon(t,d){if(!t)return;t.innerHTML=d==='dark'?'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>':'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>'}
+(function() {
+  const t = document.querySelector('[data-theme-toggle]');
+  const r = document.documentElement;
+  let d = matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light';
+  r.setAttribute('data-theme', d);
+  setIcon(t, d);
+  t && t.addEventListener('click', function() {
+    d = d === 'dark' ? 'light' : 'dark';
+    r.setAttribute('data-theme', d);
+    setIcon(t, d);
+  });
+  function setIcon(t, d) {
+    if (!t) return;
+    t.innerHTML = d === 'dark'
+      ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>'
+      : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+  }
 })();
 
-async function checkStatus(){
-  const dot=document.getElementById('status-dot'),txt=document.getElementById('status-text');
-  try{const r=await fetch(API+'/docs',{method:'HEAD',signal:AbortSignal.timeout(3000)});if(r.ok||r.status===200){dot.classList.add('online');txt.textContent='Connected'}else throw 0}
-  catch{dot.classList.remove('online');txt.textContent='Offline'}
+async function checkStatus() {
+  const dot = document.getElementById('status-dot');
+  const txt = document.getElementById('status-text');
+  try {
+    const r = await fetch(API + '/docs', { method: 'HEAD', signal: AbortSignal.timeout(3000) });
+    if (r.ok || r.status === 200) { dot.classList.add('online'); txt.textContent = 'Connected'; }
+    else throw 0;
+  } catch(e) { dot.classList.remove('online'); txt.textContent = 'Offline'; }
 }
-checkStatus();setInterval(checkStatus,15000);
+checkStatus();
+setInterval(checkStatus, 15000);
 
-function fillExample(el){document.getElementById('bet-input').value=el.textContent;document.getElementById('bet-input').focus()}
+function fillExample(el) {
+  document.getElementById('bet-input').value = el.textContent;
+  document.getElementById('bet-input').focus();
+}
 
-function icon(name, size=16) {
-  return `<i data-lucide="${name}" style="width:${size}px;height:${size}px;flex-shrink:0"></i>`;
+function icon(name, size) {
+  size = size || 16;
+  return '<i data-lucide="' + name + '" style="width:' + size + 'px;height:' + size + 'px;flex-shrink:0"></i>';
+}
+
+function formatEventDate(iso) {
+  if (!iso) return null;
+  try {
+    const d = new Date(iso);
+    const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const hrs = String(d.getHours()).padStart(2,'0');
+    const mins = String(d.getMinutes()).padStart(2,'0');
+    return days[d.getDay()] + ' ' + d.getDate() + ' ' + months[d.getMonth()] + ' \u00b7 ' + hrs + ':' + mins;
+  } catch(e) { return null; }
 }
 
 async function parseBet() {
   const input = document.getElementById('bet-input').value.trim();
   if (!input) return;
-  const btn = document.getElementById('parse-btn'), lbl = document.getElementById('parse-btn-text');
-const errEl = document.getElementById('parse-error');
-  btn.disabled = true; lbl.textContent = 'Parsing…';
-  btn.querySelector('[data-lucide]').outerHTML = '<span class="spinner"></span>';
+  const btn = document.getElementById('parse-btn');
+  const lbl = document.getElementById('parse-btn-text');
+  const errEl = document.getElementById('parse-error');
+  btn.disabled = true;
+  lbl.textContent = 'Parsing...';
+  const zapIcon = btn.querySelector('[data-lucide]');
+  if (zapIcon) zapIcon.outerHTML = '<span class="spinner"></span>';
   errEl.innerHTML = '';
   try {
     const res = await fetch(API + '/api/interpret', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ user_input: input })
     });
-    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || 'Could not parse bet.'); }
+    if (!res.ok) {
+      const e = await res.json().catch(function() { return {}; });
+      throw new Error(e.detail || 'Could not parse bet.');
+    }
     const data = await res.json();
-
-    if (data.status === 'clarification_needed') {
-      // Show clarification prompt instead of slip
-      errEl.innerHTML = `
-        <div class="banner" style="margin-top:var(--space-3);background:var(--color-primary-highlight);border:1px solid color-mix(in oklch,var(--color-primary) 30%,transparent);color:var(--color-text)">
-          ${icon('help-circle')}
-          <div>
-            <div style="font-weight:600;margin-bottom:4px">Need a bit more info</div>
-            <div>${data.clarification_question}</div>
-          </div>
-        </div>`;
+    if (data.status === 'clarification_needed' || data.clarification_question) {
+      errEl.innerHTML = '<div class="banner" style="margin-top:var(--space-3);background:var(--color-primary-highlight);border:1px solid color-mix(in oklch,var(--color-primary) 30%,transparent);color:var(--color-text)">'
+        + icon('help-circle') + '<div><div style="font-weight:600;margin-bottom:4px">Need a bit more info</div><div>' + data.clarification_question + '</div></div></div>';
       lucide.createIcons();
     } else {
-      current = { ...data.parsed_bet, originalInput: input };
+      current = Object.assign({}, data.parsed_bet, { originalInput: input, marketInfo: data.market_info || null });
       renderSlip(current);
     }
   } catch(e) {
-    errEl.innerHTML = `<div class="banner banner-err" style="margin-top:var(--space-3)">${icon('alert-circle')}<span>${e.message}</span></div>`;
+    errEl.innerHTML = '<div class="banner banner-error" style="margin-top:var(--space-3)">' + icon('alert-circle') + '<span>' + e.message + '</span></div>';
     lucide.createIcons();
   } finally {
-    btn.disabled = false; lbl.textContent = 'Parse Bet';
+    btn.disabled = false;
+    lbl.textContent = 'Parse Bet';
     const sp = btn.querySelector('.spinner');
     if (sp) sp.outerHTML = icon('zap');
     lucide.createIcons();
   }
 }
 
-function renderSlip(p){
-  const stake=p.stake||0,price=p.price||0;
-  const pot=(stake*price).toFixed(2),profit=(stake*(price-1)).toFixed(2);
-  document.getElementById('betslip-panel').innerHTML=`
-  <div class="betslip-card">
-    <div class="slip-header">
-      <div class="slip-header-left">
-        <span class="slip-sport-badge"><i data-lucide="activity" style="width:11px;height:11px"></i>${p.sport||'Sport'}</span>
-        <div class="slip-market">${p.market_type||'Match Odds'}</div>
-      </div>
-      <span class="side-badge ${p.side==='BACK'?'side-back':'side-lay'}">${p.side||'BACK'}</span>
-    </div>
-    <div class="slip-body">
-      <div class="slip-selection">${p.selection_name}</div>
-      <div class="slip-row">
-        <div class="slip-field"><span class="slip-field-label">Odds</span><span class="slip-field-value price">${price.toFixed(2)}</span></div>
-        <div class="slip-field"><span class="slip-field-label">Stake</span>
-          <div class="stake-wrap"><span class="stake-prefix">£</span>
-            <input class="stake-input" type="number" id="stake-input" value="${stake}" min="0.01" step="0.01" aria-label="Stake" oninput="updateReturns()">
-          </div>
-        </div>
-      </div>
-      <div class="slip-returns"><span class="slip-returns-label">Potential return</span><span class="slip-returns-value" id="returns-value">£${pot}</span></div>
-      <div style="font-size:var(--text-xs);color:var(--color-text-muted)">Profit: <strong style="color:var(--color-primary);font-family:var(--font-mono)" id="profit-value">£${profit}</strong></div>
-    </div>
-    <div class="slip-divider"></div>
-    <div class="slip-actions">
-      <div id="place-result"></div>
-      <button class="btn-place" id="place-btn" onclick="placeBet()">
-        <i data-lucide="check-circle" style="width:16px;height:16px"></i>
-        <span id="place-btn-text">Place Bet</span>
-      </button>
-      <button class="btn-clear" onclick="clearSlip()">Clear slip</button>
-    </div>
-  </div>`;
+function renderSlip(p) {
+  var stake = p.stake || 0;
+  var price = p.price;
+  var mi = p.marketInfo;
+
+  var priceDisplay = price
+    ? '<span class="slip-field-value price">' + price.toFixed(2) + '<span class="price-live-badge">LIVE</span></span>'
+    : '<span class="slip-field-value" style="color:var(--color-text-faint);font-style:italic">fetched on placement</span>';
+
+  var pot = price ? (stake * price).toFixed(2) : null;
+  var profit = price ? (stake * (price - 1)).toFixed(2) : null;
+
+  var eventName = (mi && mi.eventName) ? mi.eventName : p.selection_name;
+  var eventDateStr = (mi && mi.eventDate) ? formatEventDate(mi.eventDate) : null;
+  var opponent = (mi && mi.opponent) ? mi.opponent : null;
+
+  var opponentHtml = opponent
+    ? '<span class="slip-meta-item">' + icon('users', 12) + '<span>vs ' + opponent + '</span></span>'
+    : '';
+  var dateHtml = eventDateStr
+    ? '<span class="slip-meta-item">' + icon('calendar', 12) + '<span>' + eventDateStr + '</span></span>'
+    : '';
+
+  var marketLabel = (p.market_type || 'MATCH_ODDS').replace(/_/g, ' ');
+  var returnsDisplay = pot ? '\u00a3' + pot : 'Calculated at placement';
+  var profitHtml = profit
+    ? '<div style="font-size:var(--text-xs);color:var(--color-text-muted)">Profit if wins: <strong style="color:var(--color-primary);font-family:var(--font-mono)" id="profit-value">\u00a3' + profit + '</strong></div>'
+    : '';
+  var sideClass = p.side === 'BACK' ? 'side-back' : 'side-lay';
+
+  document.getElementById('betslip-panel').innerHTML =
+    '<div class="betslip-card">'
+    + '<div class="slip-header">'
+    +   '<div class="slip-header-top">'
+    +     '<span class="slip-sport-badge">' + icon('activity', 11) + (p.sport || 'Sport') + '</span>'
+    +     '<span class="side-badge ' + sideClass + '">' + (p.side || 'BACK') + '</span>'
+    +   '</div>'
+    +   '<div class="slip-event-block">'
+    +     '<div class="slip-event-name">' + eventName + '</div>'
+    +     '<div class="slip-event-meta">' + opponentHtml + dateHtml + '</div>'
+    +     '<div class="slip-market-tag">' + marketLabel + '</div>'
+    +   '</div>'
+    + '</div>'
+    + '<div class="slip-body">'
+    +   '<div>'
+    +     '<div class="slip-selection">' + p.selection_name + '</div>'
+    +     '<div class="slip-selection-sub">to win this match</div>'
+    +   '</div>'
+    +   '<div class="slip-row">'
+    +     '<div class="slip-field"><span class="slip-field-label">Live Odds</span>' + priceDisplay + '</div>'
+    +     '<div class="slip-field"><span class="slip-field-label">Stake</span>'
+    +       '<div class="stake-wrap"><span class="stake-prefix">\u00a3</span>'
+    +         '<input class="stake-input" type="number" id="stake-input" value="' + stake + '" min="0.01" step="0.01" aria-label="Stake" oninput="updateReturns()">'
+    +       '</div></div>'
+    +   '</div>'
+    +   '<div class="slip-returns"><span class="slip-returns-label">Potential return</span><span class="slip-returns-value" id="returns-value">' + returnsDisplay + '</span></div>'
+    +   profitHtml
+    + '</div>'
+    + '<div class="slip-divider"></div>'
+    + '<div class="slip-actions">'
+    +   '<div id="place-result"></div>'
+    +   '<button class="btn-place" id="place-btn" onclick="placeBet()">' + icon('check-circle', 16) + '<span id="place-btn-text">Confirm &amp; Place Bet</span></button>'
+    +   '<button class="btn-clear" onclick="clearSlip()">Clear slip</button>'
+    + '</div></div>';
+
   lucide.createIcons();
 }
 
-function updateReturns(){
-  const s=document.getElementById('stake-input'),r=document.getElementById('returns-value'),p=document.getElementById('profit-value');
-  if(!s||!current)return;
-  const stake=parseFloat(s.value)||0,price=current.price||0;
-  r.textContent='£'+(stake*price).toFixed(2);
-  p.textContent='£'+(stake*(price-1)).toFixed(2);
-  current.stake=stake;
+function updateReturns() {
+  var s = document.getElementById('stake-input');
+  var r = document.getElementById('returns-value');
+  var p = document.getElementById('profit-value');
+  if (!s || !current) return;
+  var stake = parseFloat(s.value) || 0;
+  var price = current.price || 0;
+  if (price && r) r.textContent = '\u00a3' + (stake * price).toFixed(2);
+  if (price && p) p.textContent = '\u00a3' + (stake * (price - 1)).toFixed(2);
+  current.stake = stake;
 }
 
-async function placeBet(){
-  if(!current)return;
-  const stake=parseFloat(document.getElementById('stake-input')?.value)||current.stake;
-  const btn=document.getElementById('place-btn'),btnTxt=document.getElementById('place-btn-text'),resultEl=document.getElementById('place-result');
-  btn.disabled=true;btnTxt.textContent='Placing…';
-  const ic=btn.querySelector('[data-lucide]');if(ic)ic.outerHTML='<span class="spinner"></span>';
-  try{
-    const res=await fetch(API+'/api/bet',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_input:current.originalInput,stake_override:stake})});
-    if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.detail||'Bet placement failed.')}
-    resultEl.innerHTML=`<div class="banner banner-success" style="margin-bottom:var(--space-2)"><i data-lucide="check-circle" class="banner-icon" style="width:16px;height:16px"></i><span>Bet placed successfully!</span></div>`;
-    addHistory({...current,stake,status:'placed',time:new Date()});
+async function placeBet() {
+  if (!current) return;
+  var stakeEl = document.getElementById('stake-input');
+  var stake = parseFloat(stakeEl ? stakeEl.value : 0) || current.stake;
+  var btn = document.getElementById('place-btn');
+  var btnTxt = document.getElementById('place-btn-text');
+  var resultEl = document.getElementById('place-result');
+  btn.disabled = true;
+  btnTxt.textContent = 'Placing...';
+  var ic = btn.querySelector('[data-lucide]');
+  if (ic) ic.outerHTML = '<span class="spinner"></span>';
+  try {
+    const res = await fetch(API + '/api/bet', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_input: current.originalInput, stake_override: stake })
+    });
+    if (!res.ok) {
+      const e = await res.json().catch(function() { return {}; });
+      throw new Error(e.detail || 'Bet placement failed.');
+    }
+    const data = await res.json();
+    var betfairResult = data.result;
+    if (betfairResult && betfairResult.status === 'FAILURE') {
+      var code = betfairResult.errorCode || 'UNKNOWN';
+      var msg = code === 'INVALID_ACCOUNT_STATE'
+        ? 'Account not ready for live betting (demo account or funding needed).'
+        : 'Betfair rejected the bet: ' + code;
+      throw new Error(msg);
+    }
+    var reports = betfairResult && betfairResult.instructionReports;
+    var livePrice = reports && reports[0] && reports[0].instruction && reports[0].instruction.limitOrder
+      ? reports[0].instruction.limitOrder.price : null;
+    if (livePrice) current.price = livePrice;
+    resultEl.innerHTML = '<div class="banner banner-success" style="margin-bottom:var(--space-2)">' + icon('check-circle') + '<span>Bet placed successfully!</span></div>';
+    addHistory(Object.assign({}, current, { stake: stake, status: 'placed', time: new Date() }));
     lucide.createIcons();
-    setTimeout(()=>clearSlip(),2500);
-  }catch(e){
-    resultEl.innerHTML=`<div class="banner banner-error" style="margin-bottom:var(--space-2)"><i data-lucide="x-circle" class="banner-icon" style="width:16px;height:16px"></i><span>${e.message}</span></div>`;
-    addHistory({...current,stake,status:'failed',time:new Date()});
+    setTimeout(clearSlip, 2500);
+  } catch(e) {
+    resultEl.innerHTML = '<div class="banner banner-error" style="margin-bottom:var(--space-2)">' + icon('x-circle') + '<span>' + e.message + '</span></div>';
+    addHistory(Object.assign({}, current, { stake: stake, status: 'failed', time: new Date() }));
     lucide.createIcons();
-    btn.disabled=false;btnTxt.textContent='Try Again';
-    const sp=btn.querySelector('.spinner');if(sp)sp.outerHTML='<i data-lucide="refresh-cw" style="width:16px;height:16px"></i>';
+    btn.disabled = false;
+    btnTxt.textContent = 'Try Again';
+    var sp = btn.querySelector('.spinner');
+    if (sp) sp.outerHTML = icon('refresh-cw');
     lucide.createIcons();
   }
 }
 
-function clearSlip(){
-  current=null;
-  document.getElementById('betslip-panel').innerHTML=`<div class="empty-slip"><i data-lucide="receipt" style="width:36px;height:36px" class="empty-slip-icon"></i><h3>Bet slip is empty</h3><p>Parse a bet on the left to see your bet slip here</p></div>`;
+function clearSlip() {
+  current = null;
+  document.getElementById('betslip-panel').innerHTML =
+    '<div class="empty-slip"><i data-lucide="receipt" style="width:36px;height:36px" class="empty-slip-icon"></i><h3>Bet slip is empty</h3><p>Parse a bet on the left to see your bet slip here</p></div>';
   lucide.createIcons();
 }
 
-function addHistory(bet){
-  history.unshift(bet);
-  const el=document.getElementById('history-body');
-  el.innerHTML=`<table class="history-table"><thead><tr><th>Selection</th><th>Sport</th><th>Side</th><th>Odds</th><th>Stake</th><th>Return</th><th>Status</th><th>Time</th></tr></thead><tbody>${history.map(b=>`<tr><td style="font-weight:600">${b.selection_name}</td><td style="color:var(--color-text-muted)">${b.sport||'—'}</td><td><span class="side-badge ${b.side==='BACK'?'side-back':'side-lay'}" style="font-size:.65rem">${b.side}</span></td><td class="td-mono" style="color:var(--color-primary)">${(b.price||0).toFixed(2)}</td><td class="td-mono">£${(b.stake||0).toFixed(2)}</td><td class="td-mono">£${((b.stake||0)*(b.price||0)).toFixed(2)}</td><td><span class="status-pill ${b.status==='placed'?'status-placed':b.status==='failed'?'status-failed':'status-pending'}">${b.status}</span></td><td style="color:var(--color-text-muted);font-size:var(--text-xs)">${b.time?b.time.toLocaleTimeString():'—'}</td></tr>`).join('')}</tbody></table>`;
+function addHistory(bet) {
+  betHistory.unshift(bet);
+  var el = document.getElementById('history-body');
+  var rows = betHistory.map(function(b) {
+    var eventLabel = (b.marketInfo && b.marketInfo.eventName) ? b.marketInfo.eventName : (b.sport || '-');
+    var odds = b.price ? b.price.toFixed(2) : '-';
+    var ret = b.price ? '\u00a3' + ((b.stake || 0) * b.price).toFixed(2) : '-';
+    var statusClass = b.status === 'placed' ? 'status-placed' : b.status === 'failed' ? 'status-failed' : 'status-pending';
+    var timeStr = b.time ? b.time.toLocaleTimeString() : '-';
+    var sideClass = b.side === 'BACK' ? 'side-back' : 'side-lay';
+    return '<tr>'
+      + '<td style="font-weight:600">' + b.selection_name + '</td>'
+      + '<td style="color:var(--color-text-muted);font-size:var(--text-xs)">' + eventLabel + '</td>'
+      + '<td><span class="side-badge ' + sideClass + '" style="font-size:.65rem">' + b.side + '</span></td>'
+      + '<td class="td-mono" style="color:var(--color-primary)">' + odds + '</td>'
+      + '<td class="td-mono">\u00a3' + (b.stake || 0).toFixed(2) + '</td>'
+      + '<td class="td-mono">' + ret + '</td>'
+      + '<td><span class="status-pill ' + statusClass + '">' + b.status + '</span></td>'
+      + '<td style="color:var(--color-text-muted);font-size:var(--text-xs)">' + timeStr + '</td>'
+      + '</tr>';
+  }).join('');
+  el.innerHTML = '<table class="history-table"><thead><tr>'
+    + '<th>Selection</th><th>Event</th><th>Side</th><th>Odds</th><th>Stake</th><th>Return</th><th>Status</th><th>Time</th>'
+    + '</tr></thead><tbody>' + rows + '</tbody></table>';
 }
 
-document.getElementById('bet-input').addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key==='Enter')parseBet()});
+document.getElementById('bet-input').addEventListener('keydown', function(e) {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') parseBet();
+});
+
 lucide.createIcons();
 </script>
 </body>
