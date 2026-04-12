@@ -7,12 +7,14 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from services.ai_interpreter import AIInterpreter
 from services.search_service import search_market
 from services.betslips_service import create_betslip
+from services.betfair_client import place_orders
+
 
 
 print("=== SYSTEM TEST STARTED ===")
 
 # Example user input
-user_input = "Bet Chelsea 100 at 5.2"
+user_input = "Bet Chelsea 2 against Manchester City at 3.65"
 
 print("\nUser input:")
 print(user_input)
@@ -42,5 +44,12 @@ betslip = create_betslip(
 
 print("\nGenerated Betslip:")
 print(betslip)
+
+# Step 4 — Place order 
+# Uncomment the following lines to actually place the order
+#response = place_orders(betslip["marketId"], betslip["instructions"])
+#print("\nOrder response:")
+#print(response)
+
 
 print("\n=== TEST COMPLETE ===")
