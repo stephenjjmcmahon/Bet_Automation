@@ -19,6 +19,9 @@
 
    # Windows
    venv\Scripts\activate
+
+   # Git bash
+   source venv/Scripts/activate
 ```
 
 2.2 Install dependencies
