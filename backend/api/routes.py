@@ -1,51 +1,75 @@
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 from backend.schemas.bets import BetRequest
 from backend.services.ai_interpreter import AIInterpreter
-from backend.services.search_service import search_market
+from backend.services.search_service import search_market, get_upcoming_fixtures
 from backend.api.bet_controller import place_bet
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+from pydantic import BaseModel as PydanticBase
+from typing import Optional
+import json
+from datetime import datetime
+from pathlib import Path
 
 router = APIRouter()
+executor = ThreadPoolExecutor(max_workers=8)
+
+
+class FixtureRequest(BaseModel):
+    team_name: str
+    sport: str = "football"
+
+
+@router.post("/api/fixtures")
+async def fixtures(request: FixtureRequest):
+    """Return next 3 upcoming fixtures for a team — powers the game picker UI."""
+    loop = asyncio.get_event_loop()
+    try:
+        result = await loop.run_in_executor(
+            executor,
+            lambda: get_upcoming_fixtures(request.team_name, request.sport, limit=3)
+        )
+        return {"fixtures": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/api/interpret")
-def interpret_bet(request: BetRequest):
+async def interpret_bet(request: BetRequest):
+    loop = asyncio.get_event_loop()
     try:
-        # Step 1: Parse natural language
-        parsed = AIInterpreter.interpret(request.user_input)
+        parsed = await loop.run_in_executor(
+            executor, AIInterpreter.interpret, request.user_input
+        )
 
         if parsed.status == "clarification_needed":
             return {
                 "status": "clarification_needed",
                 "clarification_question": parsed.clarification_question,
-                "parsed_bet": None,
+                "missing_fields": parsed.missing_fields or [],
+                "parsed_bet": parsed.parsed_bet.dict() if parsed.parsed_bet else None,
                 "market_info": None
             }
 
         bet = parsed.parsed_bet
 
-        # Step 2: Look up Betfair market to get full event details + live price
         market_info = None
         try:
-            raw = search_market(bet)
+            raw = await loop.run_in_executor(executor, search_market, bet)
             if raw:
-                event_name = raw.get("eventName") or raw.get("event_name") or ""
-                selection = bet.selection_name
-
-                opponent = None
-                if " v " in event_name:
-                    home, away = event_name.split(" v ", 1)
-                    opponent = away if selection.lower() in home.lower() else home
-
+                event_name = raw.get("eventName") or ""
+                opponent = raw.get("opponent")
                 market_info = {
                     "eventName":   event_name,
                     "opponent":    opponent,
-                    "eventDate":   raw.get("eventDate") or raw.get("event_date"),
+                    "eventDate":   raw.get("eventDate"),
                     "marketId":    raw.get("marketId"),
                     "selectionId": raw.get("selectionId"),
                     "livePrice":   raw.get("livePrice"),
                 }
         except Exception:
-            pass  # market_info stays None — slip still renders fine
+            pass
 
         return {
             "status": "ok",
@@ -58,8 +82,39 @@ def interpret_bet(request: BetRequest):
                 "price":         market_info["livePrice"] if market_info else None,
             },
             "clarification_question": None,
+            "missing_fields": [],
             "market_info": market_info
         }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/api/bet")
+async def bet(request: BetRequest):
+    loop = asyncio.get_event_loop()
+    try:
+        result = await loop.run_in_executor(executor, place_bet, request)
+        return {"status": "success", "result": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class FeedbackRequest(PydanticBase):
+    input: str
+    output: dict
+    correct: bool
+    note: Optional[str] = None
+
+@router.post("/api/feedback")
+async def feedback(request: FeedbackRequest):
+    Path("logs").mkdir(exist_ok=True)
+    entry = {
+        "timestamp": datetime.utcnow().isoformat(),
+        "input": request.input,
+        "output": request.output,
+        "correct": request.correct,
+        "note": request.note or ""
+    }
+    with open("logs/feedback.jsonl", "a") as f:
+        f.write(json.dumps(entry) + "\n")
+    return {"status": "ok"}

@@ -1,0 +1,2 @@
+{"timestamp": "2026-05-05T16:50:21.372271", "input": "test", "output": {}, "correct": false, "note": "test note"}
+{"timestamp": "2026-05-05T17:03:26.119269", "input": "back Bayern Munich 50", "output": {"selection_name": "Bayern Munich", "sport": "Football", "side": "BACK", "stake": 50, "price": 1.76, "market_type": "MATCH_ODDS"}, "correct": false, "note": "not the game I am looking for. should show user an option of their chosen teams next 3 games in this scenario"}
