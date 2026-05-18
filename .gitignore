@@ -16,3 +16,7 @@ node_modules/
 .DS_Store
 .vscode/
 .idea/
+
+# Logs and database
+logs/
+*.db

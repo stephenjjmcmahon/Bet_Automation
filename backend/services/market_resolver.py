@@ -5,6 +5,6 @@ def resolve_selection(runners, selection_name):
     for runner in runners:
 
         if runner["runnerName"].lower() == selection_name:
-            return runner["selectionId"]
+            return str(runner["selectionId"])
 
     return None
