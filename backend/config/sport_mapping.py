@@ -11,10 +11,5 @@ SPORT_EVENT_TYPE_MAP = {
     "baseball": "11",
     "american football": "6423",
     "basketball": "7522",
-    "nba": "7522",
     "ice hockey": "7524",
-    "hockey": "7524",
-    "nhl": "7524",
-    "nfl": "6423",
-    "mlb": "11",
 }

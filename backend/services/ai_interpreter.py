@@ -3,6 +3,7 @@ import os
 from openai import OpenAI
 from dotenv import load_dotenv
 from backend.schemas.bets import ParsedBet
+from backend.config.sport_mapping import SPORT_EVENT_TYPE_MAP
 
 load_dotenv()
 
@@ -21,6 +22,8 @@ class AIInterpreter:
         (opponent, competition, match_date) are extracted when mentioned but left
         null if the user did not specify them.
         """
+        allowed_sports = ", ".join(f'"{sport}"' for sport in SPORT_EVENT_TYPE_MAP.keys())
+
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             temperature=0,
@@ -40,16 +43,17 @@ Convert the following betting instruction into JSON with these fields:
 - opponent (string or null): the opposing team or player, if mentioned
 - competition (string or null): the league or tournament, if mentioned (e.g. "Premier League")
 - match_date (string or null): any date or time reference if mentioned (e.g. "tonight", "Saturday"), as a raw string
-- sport (string)
+- sport (must be one of: {allowed_sports}, or empty string if it cannot be inferred)
 - side (must be "BACK" or "LAY")
 - stake (number)
 - price (number or null): the odds if explicitly stated, otherwise null
 - market_type (always set to "MATCH_ODDS")
 
+
 User input:
 "{user_input}"
-""",
-                },
+"""
+                }
             ],
         )
 
