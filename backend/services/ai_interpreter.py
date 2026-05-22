@@ -90,14 +90,7 @@ User input:
         if not candidates:
             return None
 
-        # Format candidates into a readable list for the prompt
-        lines = []
-        for c in candidates:
-            event = c["event"]
-            lines.append(
-                f'  - ID: {event["id"]} | Name: {event["name"]} | Date: {event.get("openDate", "unknown")}'
-            )
-        candidates_text = "\n".join(lines)
+        candidates_text = json.dumps(candidates, indent=2)
 
         response = client.chat.completions.create(
             model="gpt-4o-mini",
