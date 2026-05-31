@@ -2,8 +2,9 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
-from backend.schemas.bets import BetRequest, ParsedBet, PreparedSlip
+from backend.schemas.bets import BetRequest, PreparedSlip
 from backend.services.ai_interpreter import AIInterpreter
 from backend.services.search_service import find_event_candidates, resolve_market
 from backend.services.betslips_service import create_betslip
@@ -11,13 +12,27 @@ from backend.services.betfair_client import place_orders
 from backend.services.odds_service import get_best_price, MarketSuspendedError, InsufficientLiquidityError
 from backend.services import pending_slips
 from backend.services import logger
+from backend.services.betfair_auth import login, SessionExpiredError
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
 
 router = APIRouter()
 
 
-@router.post("/api/interpret", response_model=ParsedBet)
-def interpret_bet(request: BetRequest):
-    return AIInterpreter.interpret(request.user_input)
+@router.post("/api/login")
+def betfair_login(request: LoginRequest):
+    try:
+        login(request.username, request.password)
+        return {"status": "ok"}
+    except ValueError as e:
+        # Betfair returned a non-SUCCESS status (wrong credentials, locked account, etc.)
+        raise HTTPException(status_code=401, detail=str(e))
+    except Exception as e:
+        # Network failure or unexpected error reaching the Betfair auth endpoint
+        raise HTTPException(status_code=502, detail=f"Could not reach Betfair: {str(e)}")
 
 
 @router.post("/api/prepare", response_model=PreparedSlip)
@@ -41,8 +56,9 @@ def prepare_bet(request: BetRequest):
             detail="No matching event found on Betfair. Try including the opponent or competition.",
         )
 
-    # Extract the selected event's start time from the candidate list for time_to_event logging
+    # Pull event details from the Betfair candidate — name, start time come from here
     selected = next((c for c in candidates if c["event"]["id"] == event_id), None)
+    event_name = selected["event"].get("name") if selected else None
     event_start_time = selected["event"].get("openDate") if selected else None
 
     try:
@@ -125,6 +141,9 @@ def prepare_bet(request: BetRequest):
         market_id=market_ids["marketId"],
         selection_id=market_ids["selectionId"],
         selection_name=parsed_bet.selection_name,
+        event_name=event_name,
+        competition=market_ids.get("competition"),
+        event_start_time=event_start_time,
         side=parsed_bet.side,
         price=live_price,
         requested_price=parsed_bet.price,
@@ -145,7 +164,7 @@ def confirm_bet(slip_id: str):
         raise HTTPException(status_code=404, detail="Slip not found or expired")
 
     now = datetime.now(timezone.utc)
-    time_to_confirm_ms = int((now - created_at).total_seconds() * 1000)
+    time_to_confirm_ms = int((now - created_at).total_seconds() * 1000) if created_at else None
     limit_order = betslip["instructions"][0]["limitOrder"]
 
     logger.log_event(

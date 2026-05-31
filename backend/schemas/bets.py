@@ -24,6 +24,9 @@ class PreparedSlip(BaseModel):
     market_id: str
     selection_id: str
     selection_name: str
+    event_name: Optional[str] = None       # full Betfair event name e.g. "Chelsea v Man City"
+    competition: Optional[str] = None      # from Betfair COMPETITION projection
+    event_start_time: Optional[str] = None # ISO start time from Betfair
     side: str
     price: float             # live price fetched from Betfair at time of prepare
     requested_price: Optional[float]  # price the user stated, None if not specified

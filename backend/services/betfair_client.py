@@ -1,6 +1,8 @@
 import os
 import requests
 from dotenv import load_dotenv
+from backend.services.betfair_auth import get_token, clear_token, SessionExpiredError
+
 load_dotenv()
 
 BETFAIR_ENDPOINT = "https://api.betfair.com/exchange/betting/rest/v1.0/"
@@ -9,7 +11,7 @@ def betfair_post(path: str, payload: dict):
 
     headers = {
         "X-Application": os.getenv("BETFAIR_APP_KEY"),
-        "X-Authentication": os.getenv("BETFAIR_SESSION_TOKEN"),
+        "X-Authentication": get_token(),
         "Content-Type": "application/json",
     }
 
@@ -19,6 +21,12 @@ def betfair_post(path: str, payload: dict):
 
     print("STATUS:", r.status_code)
    # print("RESPONSE:", r.text)
+
+    # Token expires after ~4hrs of inactivity. Clear it so the next request
+    # triggers a re-login prompt rather than looping on stale credentials.
+    if r.status_code == 401:
+        clear_token()
+        raise SessionExpiredError("Betfair session expired — please log in again")
 
     r.raise_for_status()
 
@@ -43,7 +51,7 @@ def list_market_catalogue(event_id: str, market_type: str = "MATCH_ODDS"):
             "marketTypeCodes": [market_type]            ### Only works with footbal TODO Change ai to work with other sports market definitions
         },
         "maxResults": "5",
-        "marketProjection": ["RUNNER_DESCRIPTION", "EVENT"]
+        "marketProjection": ["RUNNER_DESCRIPTION", "EVENT", "COMPETITION"]
 
     }
     #print("Markets returned:", payload)

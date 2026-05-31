@@ -103,9 +103,48 @@ img{display:block;max-width:100%}
 .status-pending{background:var(--color-surface-offset);color:var(--color-text-muted)}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border-width:0}
 @media(max-width:768px){.main{grid-template-columns:1fr;padding:var(--space-4);gap:var(--space-4)}.betslip{order:-1}.slip-row{grid-template-columns:1fr}.header{padding:var(--space-3) var(--space-4)}}
+.login-overlay{position:fixed;inset:0;background:var(--color-bg);display:flex;align-items:center;justify-content:center;z-index:100;padding:var(--space-4)}
+.login-card{background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-xl);padding:var(--space-8);width:100%;max-width:400px;box-shadow:var(--shadow-lg);display:flex;flex-direction:column;gap:var(--space-5)}
+.login-logo{display:flex;align-items:center;gap:var(--space-2);color:var(--color-primary);margin-bottom:var(--space-2)}
+.login-title{font-size:var(--text-lg);font-weight:700;color:var(--color-text)}
+.login-subtitle{font-size:var(--text-sm);color:var(--color-text-muted);margin-top:var(--space-1)}
+.login-field{display:flex;flex-direction:column;gap:var(--space-2)}
+.login-label{font-size:var(--text-sm);font-weight:500;color:var(--color-text)}
+.login-input{background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:var(--space-3) var(--space-4);font-size:var(--text-base);color:var(--color-text);transition:border-color var(--transition-interactive),box-shadow var(--transition-interactive)}
+.login-input:focus{outline:none;border-color:var(--color-primary);box-shadow:0 0 0 3px color-mix(in oklch,var(--color-primary) 15%,transparent)}
+.btn-login{width:100%;background:var(--color-primary);color:var(--color-text-inverse);border-radius:var(--radius-lg);padding:var(--space-3) var(--space-5);font-size:var(--text-sm);font-weight:700;display:flex;align-items:center;justify-content:center;gap:var(--space-2);transition:background var(--transition-interactive),transform var(--transition-interactive);margin-top:var(--space-2)}
+.btn-login:hover{background:var(--color-primary-hover)}
+.btn-login:active{background:var(--color-primary-active);transform:scale(0.99)}
+.btn-login:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.login-hidden{display:none!important}
 </style>
 </head>
 <body>
+<div class="login-overlay" id="login-overlay">
+  <div class="login-card">
+    <div>
+      <div class="login-logo">
+        <svg aria-hidden="true" width="28" height="28" viewBox="0 0 28 28" fill="none"><rect x="2" y="2" width="24" height="24" rx="6" stroke="currentColor" stroke-width="2"/><path d="M8 14h4l2-5 2 10 2-5h2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span style="font-size:var(--text-base);font-weight:700;color:var(--color-text)">BetAuto</span>
+      </div>
+      <div class="login-title">Sign in to Betfair</div>
+      <div class="login-subtitle" id="login-subtitle">Enter your Betfair credentials to continue</div>
+    </div>
+    <div class="login-field">
+      <label class="login-label" for="login-username">Username</label>
+      <input class="login-input" id="login-username" type="text" autocomplete="username" placeholder="Username or email">
+    </div>
+    <div class="login-field">
+      <label class="login-label" for="login-password">Password</label>
+      <input class="login-input" id="login-password" type="password" autocomplete="current-password" placeholder="Betfair password">
+    </div>
+    <div id="login-error"></div>
+    <button class="btn-login" id="login-btn" onclick="doLogin()">
+      <span id="login-btn-text">Sign in</span>
+    </button>
+  </div>
+</div>
+
 <a href="#main-content" class="sr-only">Skip to content</a>
 <div class="app">
   <header class="header">
@@ -191,18 +230,20 @@ async function parseBet(){
   const input=document.getElementById('bet-input').value.trim();
   if(!input)return;
   const btn=document.getElementById('parse-btn'),btnTxt=document.getElementById('parse-btn-text'),errEl=document.getElementById('parse-error');
-  btn.disabled=true;btnTxt.textContent='Parsing…';
+  btn.disabled=true;btnTxt.textContent='Preparing…';
   const ic=btn.querySelector('[data-lucide]');if(ic)ic.outerHTML='<span class="spinner"></span>';
   errEl.innerHTML='';
   try{
-    const res=await fetch(API+'/api/interpret',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_input:input})});
-    if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.detail||'Failed to parse. Check your input.')}
-    const parsed=await res.json();
-    current={...parsed,originalInput:input};
+    const res=await apiFetch(API+'/api/prepare',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_input:input})});
+    if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.detail||'Failed to prepare bet. Check your input.')}
+    const slip=await res.json();
+    current=slip;
     renderSlip(current);
   }catch(e){
-    errEl.innerHTML=`<div class="banner banner-error" style="margin-top:var(--space-3)"><i data-lucide="alert-circle" class="banner-icon" style="width:16px;height:16px"></i><span>${e.message}</span></div>`;
-    lucide.createIcons();
+    if(e.message!=='session_expired'){
+      errEl.innerHTML=`<div class="banner banner-error" style="margin-top:var(--space-3)"><i data-lucide="alert-circle" class="banner-icon" style="width:16px;height:16px"></i><span>${e.message}</span></div>`;
+      lucide.createIcons();
+    }
   }finally{
     btn.disabled=false;btnTxt.textContent='Parse Bet';
     const sp=btn.querySelector('.spinner');if(sp)sp.outerHTML='<i data-lucide="zap" style="width:16px;height:16px"></i>';
@@ -212,28 +253,30 @@ async function parseBet(){
 
 function renderSlip(p){
   const stake=p.stake||0,price=p.price||0;
-  const pot=(stake*price).toFixed(2),profit=(stake*(price-1)).toFixed(2);
+  const ret=(p.projected_return||stake*price).toFixed(2);
+  const profit=(p.projected_return?p.projected_return-stake:stake*(price-1)).toFixed(2);
+  const startTime=p.event_start_time?formatEventTime(p.event_start_time):'—';
   document.getElementById('betslip-panel').innerHTML=`
   <div class="betslip-card">
     <div class="slip-header">
       <div class="slip-header-left">
-        <span class="slip-sport-badge"><i data-lucide="activity" style="width:11px;height:11px"></i>${p.sport||'Sport'}</span>
-        <div class="slip-market">${p.market_type||'Match Odds'}</div>
+        <span class="slip-sport-badge"><i data-lucide="activity" style="width:11px;height:11px"></i>Match Odds</span>
+        <div class="slip-market">${p.competition||'—'}</div>
       </div>
       <span class="side-badge ${p.side==='BACK'?'side-back':'side-lay'}">${p.side||'BACK'}</span>
     </div>
     <div class="slip-body">
-      <div class="slip-selection">${p.selection_name}</div>
+      <div class="slip-selection">${p.event_name||p.selection_name}</div>
+      <div style="font-size:var(--text-sm);color:var(--color-text-muted);margin-top:var(--space-1)">Betting on: <strong>${p.selection_name}</strong></div>
       <div class="slip-row">
-        <div class="slip-field"><span class="slip-field-label">Odds</span><span class="slip-field-value price">${price.toFixed(2)}</span></div>
-        <div class="slip-field"><span class="slip-field-label">Stake</span>
-          <div class="stake-wrap"><span class="stake-prefix">£</span>
-            <input class="stake-input" type="number" id="stake-input" value="${stake}" min="0.01" step="0.01" aria-label="Stake" oninput="updateReturns()">
-          </div>
-        </div>
+        <div class="slip-field"><span class="slip-field-label">Start Time</span><span class="slip-field-value" style="font-size:var(--text-sm)">${startTime}</span></div>
+        <div class="slip-field"><span class="slip-field-label">Live Odds</span><span class="slip-field-value price">${price.toFixed(2)}</span></div>
       </div>
-      <div class="slip-returns"><span class="slip-returns-label">Potential return</span><span class="slip-returns-value" id="returns-value">£${pot}</span></div>
-      <div style="font-size:var(--text-xs);color:var(--color-text-muted)">Profit: <strong style="color:var(--color-primary);font-family:var(--font-mono)" id="profit-value">£${profit}</strong></div>
+      <div class="slip-row">
+        <div class="slip-field"><span class="slip-field-label">Stake</span><span class="slip-field-value">£${stake.toFixed(2)}</span></div>
+        <div class="slip-field"><span class="slip-field-label">Potential Return</span><span class="slip-field-value price">£${ret}</span></div>
+      </div>
+      <div style="font-size:var(--text-xs);color:var(--color-text-muted)">Profit: <strong style="color:var(--color-primary);font-family:var(--font-mono)">£${profit}</strong></div>
     </div>
     <div class="slip-divider"></div>
     <div class="slip-actions">
@@ -248,31 +291,30 @@ function renderSlip(p){
   lucide.createIcons();
 }
 
-function updateReturns(){
-  const s=document.getElementById('stake-input'),r=document.getElementById('returns-value'),p=document.getElementById('profit-value');
-  if(!s||!current)return;
-  const stake=parseFloat(s.value)||0,price=current.price||0;
-  r.textContent='£'+(stake*price).toFixed(2);
-  p.textContent='£'+(stake*(price-1)).toFixed(2);
-  current.stake=stake;
+function formatEventTime(iso){
+  try{
+    const d=new Date(iso);
+    return d.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})
+      +' '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+  }catch{return iso;}
 }
 
 async function placeBet(){
   if(!current)return;
-  const stake=parseFloat(document.getElementById('stake-input')?.value)||current.stake;
   const btn=document.getElementById('place-btn'),btnTxt=document.getElementById('place-btn-text'),resultEl=document.getElementById('place-result');
   btn.disabled=true;btnTxt.textContent='Placing…';
   const ic=btn.querySelector('[data-lucide]');if(ic)ic.outerHTML='<span class="spinner"></span>';
   try{
-    const res=await fetch(API+'/api/bet',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_input:current.originalInput,stake_override:stake})});
+    const res=await apiFetch(API+'/api/confirm/'+current.slip_id,{method:'POST'});
     if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.detail||'Bet placement failed.')}
     resultEl.innerHTML=`<div class="banner banner-success" style="margin-bottom:var(--space-2)"><i data-lucide="check-circle" class="banner-icon" style="width:16px;height:16px"></i><span>Bet placed successfully!</span></div>`;
-    addHistory({...current,stake,status:'placed',time:new Date()});
+    addHistory({...current,status:'placed',time:new Date()});
     lucide.createIcons();
     setTimeout(()=>clearSlip(),2500);
   }catch(e){
+    if(e.message==='session_expired')return;
     resultEl.innerHTML=`<div class="banner banner-error" style="margin-bottom:var(--space-2)"><i data-lucide="x-circle" class="banner-icon" style="width:16px;height:16px"></i><span>${e.message}</span></div>`;
-    addHistory({...current,stake,status:'failed',time:new Date()});
+    addHistory({...current,status:'failed',time:new Date()});
     lucide.createIcons();
     btn.disabled=false;btnTxt.textContent='Try Again';
     const sp=btn.querySelector('.spinner');if(sp)sp.outerHTML='<i data-lucide="refresh-cw" style="width:16px;height:16px"></i>';
@@ -293,7 +335,49 @@ function addHistory(bet){
 }
 
 document.getElementById('bet-input').addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key==='Enter')parseBet()});
+document.getElementById('login-password').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin()});
 lucide.createIcons();
+
+// Submit credentials to the backend, which forwards them to Betfair's auth endpoint.
+// Password is cleared on success so it doesn't linger in the DOM.
+async function doLogin(){
+  const username=document.getElementById('login-username').value.trim();
+  const password=document.getElementById('login-password').value;
+  const btn=document.getElementById('login-btn'),btnTxt=document.getElementById('login-btn-text');
+  const errEl=document.getElementById('login-error');
+  if(!username||!password){errEl.innerHTML='<div class="banner banner-error" style="margin-top:0"><span>Please enter both username and password.</span></div>';return;}
+  btn.disabled=true;btnTxt.textContent='Signing in…';errEl.innerHTML='';
+  try{
+    const res=await fetch(API+'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});
+    if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.detail||'Login failed. Check your credentials.')}
+    document.getElementById('login-overlay').classList.add('login-hidden');
+    document.getElementById('login-password').value='';
+  }catch(e){
+    errEl.innerHTML=`<div class="banner banner-error" style="margin-top:0"><span>${e.message}</span></div>`;
+    btn.disabled=false;btnTxt.textContent='Sign in';
+  }
+}
+
+// Re-shows the login overlay with an optional reason message.
+// Called on page load (implicitly, overlay starts visible) and on session expiry.
+function showLoginPrompt(reason){
+  const overlay=document.getElementById('login-overlay');
+  const subtitle=document.getElementById('login-subtitle');
+  subtitle.textContent=reason||'Enter your Betfair credentials to continue';
+  overlay.classList.remove('login-hidden');
+  document.getElementById('login-username').focus();
+}
+
+// Wrapper around fetch that intercepts 401s from any endpoint and re-prompts login
+// instead of silently failing or showing a generic error.
+async function apiFetch(url,options={}){
+  const res=await fetch(url,options);
+  if(res.status===401){
+    showLoginPrompt('Your session has expired — please sign in again.');
+    throw new Error('session_expired');
+  }
+  return res;
+}
 </script>
 </body>
 </html>""")

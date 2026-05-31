@@ -127,4 +127,5 @@ or {{"event_id": null}} if none of them match what the user is looking for.
             return None
 
         result = json.loads(content.strip())
+        print(result)
         return result.get("event_id")

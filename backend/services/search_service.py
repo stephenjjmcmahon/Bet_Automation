@@ -57,5 +57,6 @@ def resolve_market(event_id: str, parsed_bet) -> dict:
     return {
         "eventId": event_id,
         "marketId": market["marketId"],
-        "selectionId": selection_id
+        "selectionId": selection_id,
+        "competition": market.get("competition", {}).get("name"),
     }
