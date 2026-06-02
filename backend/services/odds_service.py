@@ -56,7 +56,7 @@ class InsufficientLiquidityError(Exception):
     """Raised when available size at the best price is less than the requested stake."""
 
 
-def get_best_price(market_id: str, selection_id: str, side: str, stake: float) -> float:
+def get_best_price(market_id: str, selection_id: str, side: str, stake: float, session: dict) -> float:
     """
     Return the best available live price for a runner and validate liquidity.
 
@@ -93,7 +93,7 @@ def get_best_price(market_id: str, selection_id: str, side: str, stake: float) -
         If there are no offers on the requested side, or the available size
         at the best price is smaller than the requested stake.
     """
-    book = get_market_book(market_id)
+    book = get_market_book(market_id, session)
 
     if book["status"] == "SUSPENDED":
         raise MarketSuspendedError(

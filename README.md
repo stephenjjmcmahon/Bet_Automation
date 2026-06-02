@@ -35,7 +35,7 @@
 
 
 ## Daily Setup
-1. Go to Betfair Exchange Api and follow steps to get the session token. 
-- This involves signing in, either use my details (check email) or make new account. My details p easier
+To run backend:
+uvicorn backend.main:app --reload
 
-2. Paste Session Token into the correct place in the .env file.
+Page hosted at http://localhost:8000 

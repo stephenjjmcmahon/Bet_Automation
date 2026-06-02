@@ -1,106 +1,138 @@
-"""
-Structured event logger using SQLite.
-
-Every significant action in the bet flow — slip prepared, bet confirmed,
-slip expired, prepare failed — writes one row to the bet_events table.
-The slip_id column links a slip_prepared row to its bet_confirmed or
-slip_expired row, so time_to_confirm can be queried directly.
-
-Switching to PostgreSQL later requires only changing DB_PATH to a connection
-string and swapping sqlite3 for psycopg2/asyncpg — the table schema and
-log_event call sites stay identical.
-
-Pilot metrics available from this table
-----------------------------------------
-Time-to-bet:
-    SELECT AVG(time_to_slip_ms) FROM bet_events WHERE event_type = 'slip_prepared'
-
-Completion rate:
-    SELECT
-        SUM(CASE WHEN event_type = 'bet_confirmed' THEN 1 ELSE 0 END) * 1.0
-        / SUM(CASE WHEN event_type = 'slip_prepared' THEN 1 ELSE 0 END)
-    FROM bet_events
-
-Total handle (GBP staked on confirmed bets):
-    SELECT SUM(stake) FROM bet_events WHERE event_type = 'bet_confirmed'
-
-Average time to confirm:
-    SELECT AVG(time_to_confirm_ms) FROM bet_events WHERE event_type = 'bet_confirmed'
-"""
-
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
 DB_PATH = Path(__file__).resolve().parent.parent.parent / "logs" / "betting.db"
 
-_CREATE_TABLE = """
-    CREATE TABLE IF NOT EXISTS bet_events (
-        id                    INTEGER PRIMARY KEY AUTOINCREMENT,
-        event_type            TEXT    NOT NULL,
-        timestamp             TEXT    NOT NULL,
-        slip_id               TEXT,
-        time_to_slip_ms       INTEGER,
-        time_to_confirm_ms    INTEGER,
-        selection_name        TEXT,
-        side                  TEXT,
-        stake                 REAL,
-        price                 REAL,
-        market_id             TEXT,
-        event_id              TEXT,
+# One row per slip — updated in place as the bet moves through its lifecycle.
+# slip_id is the primary key so confirmed/expired UPDATEs hit the right row.
+# Columns nullable by design: confirmed_at/expired_at are NULL until that event happens;
+# event_start_time/time_to_event_seconds are NULL if Betfair didn't return a start time.
+_CREATE_BETS = """
+    CREATE TABLE IF NOT EXISTS bets (
+        slip_id               TEXT PRIMARY KEY,
+        status                TEXT NOT NULL DEFAULT 'prepared',  -- prepared | confirmed | expired
+        prepared_at           TEXT NOT NULL,
+        confirmed_at          TEXT,
+        expired_at            TEXT,
+        time_to_slip_ms       INTEGER NOT NULL,   -- how long AI + search took
+        time_to_confirm_ms    INTEGER,            -- how long the user took to confirm
+        selection_name        TEXT NOT NULL,
+        side                  TEXT NOT NULL,      -- BACK | LAY
+        stake                 REAL NOT NULL,
+        price                 REAL NOT NULL,
+        market_id             TEXT NOT NULL,
+        event_id              TEXT NOT NULL,
         event_start_time      TEXT,
-        time_to_event_seconds INTEGER,
-        reason                TEXT
+        time_to_event_seconds INTEGER
     )
 """
 
-_INSERT = """
-    INSERT INTO bet_events (
-        event_type, timestamp, slip_id,
-        time_to_slip_ms, time_to_confirm_ms,
-        selection_name, side, stake, price,
-        market_id, event_id, event_start_time,
-        time_to_event_seconds, reason
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+# Requests that never produced a slip — separate table because these have no slip_id
+# and a completely different set of relevant fields to bets.
+# market_id and event_id are nullable: early failures happen before those are resolved.
+_CREATE_FAILURES = """
+    CREATE TABLE IF NOT EXISTS failures (
+        id                INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp         TEXT NOT NULL,
+        reason            TEXT NOT NULL,    -- no_matching_event | market_resolution_failed | market_suspended | insufficient_liquidity
+        selection_name    TEXT,
+        stake             REAL,
+        market_id         TEXT,             -- NULL if failure was before market resolution
+        event_id          TEXT              -- NULL if failure was before event was found
+    )
 """
 
 
-def log_event(event_type: str, **fields) -> None:
-    """
-    Write one structured row to the bet_events table.
-
-    Parameters
-    ----------
-    event_type : str
-        One of: slip_prepared | bet_confirmed | slip_expired | prepare_failed
-    **fields
-        Any subset of the bet_events columns. Columns not supplied are NULL.
-        Extra keys not matching any column are silently ignored.
-
-    The database file and logs/ directory are created on first call.
-    WAL journal mode is enabled for better concurrent read performance.
-    """
+def _get_conn():
+    # Creates the logs/ directory and both tables if they don't already exist,
+    # then returns an open connection ready to use.
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(DB_PATH))
+    conn.execute("PRAGMA journal_mode=WAL")  # better concurrent read performance
+    conn.execute(_CREATE_BETS)
+    conn.execute(_CREATE_FAILURES)
+    return conn
+
+
+def log_slip_prepared(
+    slip_id: str,
+    time_to_slip_ms: int,
+    selection_name: str,
+    side: str,
+    stake: float,
+    price: float,
+    market_id: str,
+    event_id: str,
+    event_start_time: str | None = None,
+    time_to_event_seconds: int | None = None,
+) -> None:
+    # INSERT a new row — status starts as 'prepared' and is updated later on confirm/expire.
+    prepared_at = datetime.now(timezone.utc).isoformat()
+    conn = _get_conn()
     try:
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute(_CREATE_TABLE)
-        conn.execute(_INSERT, (
-            event_type,
-            datetime.now(timezone.utc).isoformat(),
-            fields.get("slip_id"),
-            fields.get("time_to_slip_ms"),
-            fields.get("time_to_confirm_ms"),
-            fields.get("selection_name"),
-            fields.get("side"),
-            fields.get("stake"),
-            fields.get("price"),
-            fields.get("market_id"),
-            fields.get("event_id"),
-            fields.get("event_start_time"),
-            fields.get("time_to_event_seconds"),
-            fields.get("reason"),
-        ))
+        conn.execute(
+            """
+            INSERT INTO bets (
+                slip_id, status, prepared_at, time_to_slip_ms,
+                selection_name, side, stake, price,
+                market_id, event_id, event_start_time, time_to_event_seconds
+            ) VALUES (?, 'prepared', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                slip_id, prepared_at, time_to_slip_ms,
+                selection_name, side, stake, price,
+                market_id, event_id, event_start_time, time_to_event_seconds,
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def log_bet_confirmed(slip_id: str, time_to_confirm_ms: int | None) -> None:
+    # UPDATE the existing row rather than inserting — all the bet details are already there.
+    confirmed_at = datetime.now(timezone.utc).isoformat()
+    conn = _get_conn()
+    try:
+        conn.execute(
+            "UPDATE bets SET status='confirmed', confirmed_at=?, time_to_confirm_ms=? WHERE slip_id=?",
+            (confirmed_at, time_to_confirm_ms, slip_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def log_slip_expired(slip_id: str) -> None:
+    # UPDATE the existing row — slip timed out before the user confirmed.
+    expired_at = datetime.now(timezone.utc).isoformat()
+    conn = _get_conn()
+    try:
+        conn.execute(
+            "UPDATE bets SET status='expired', expired_at=? WHERE slip_id=?",
+            (expired_at, slip_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def log_failure(
+    reason: str,
+    selection_name: str | None = None,
+    stake: float | None = None,
+    market_id: str | None = None,
+    event_id: str | None = None,
+) -> None:
+    # INSERT into the separate failures table — these requests never produced a slip.
+    timestamp = datetime.now(timezone.utc).isoformat()
+    conn = _get_conn()
+    try:
+        conn.execute(
+            "INSERT INTO failures (timestamp, reason, selection_name, stake, market_id, event_id) VALUES (?, ?, ?, ?, ?, ?)",
+            (timestamp, reason, selection_name, stake, market_id, event_id),
+        )
         conn.commit()
     finally:
         conn.close()

@@ -64,35 +64,14 @@ User input:
         return ParsedBet.model_validate_json(content.strip())
 
     @staticmethod
-    def select_event(user_input: str, candidates: list) -> str | None:
+    def select_top_events(user_input: str, candidates: list, n: int = 3) -> list[str]:
         """
-        Pick the best matching Betfair event from a list of candidates.
+        Pick the top n most likely matching Betfair events, ranked best-to-worst.
 
-        This is a second AI call made after find_event_candidates() returns
-        results from Betfair. Rather than blindly taking events[0], we let the
-        AI compare the user's original intent against every candidate's name
-        and date, then select the most likely match.
-
-        Returns None if candidates is empty or if the AI determines that none
-        of the candidates match what the user asked for — the caller should
-        treat None as a 404 (no matching event found).
-
-        Parameters
-        ----------
-        user_input : str
-            The raw user input, passed through unchanged so the AI has full
-            context rather than just the extracted fields.
-        candidates : list
-            Raw event list returned by Betfair listEvents. Each element is a
-            dict with at minimum {"event": {"id": str, "name": str, "openDate": str}}.
-
-        Returns
-        -------
-        str | None
-            The Betfair event ID of the best match, or None.
+        Returns an empty list if candidates is empty or the AI finds no matches.
         """
         if not candidates:
-            return None
+            return []
 
         candidates_text = json.dumps(candidates, indent=2)
 
@@ -103,7 +82,7 @@ User input:
                 {
                     "role": "system",
                     "content": (
-                        "You select the best matching Betfair event from a list "
+                        "You select the best matching Betfair events from a list "
                         "based on a user's betting request. "
                         "Return ONLY valid JSON. No explanation."
                     ),
@@ -115,8 +94,9 @@ User input:
 Available Betfair events:
 {candidates_text}
 
-Return JSON: {{"event_id": "<id>"}} with the ID of the best matching event,
-or {{"event_id": null}} if none of them match what the user is looking for.
+Return JSON: {{"event_ids": ["<id1>", "<id2>", "<id3>"]}} with up to {n} event IDs
+ranked from best to worst match. Include only events that could plausibly match the request.
+Return fewer IDs if fewer events match. If none match, return {{"event_ids": []}}.
 """,
                 },
             ],
@@ -124,8 +104,7 @@ or {{"event_id": null}} if none of them match what the user is looking for.
 
         content = response.choices[0].message.content
         if content is None:
-            return None
+            return []
 
         result = json.loads(content.strip())
-        print(result)
-        return result.get("event_id")
+        return [eid for eid in result.get("event_ids", []) if eid is not None]

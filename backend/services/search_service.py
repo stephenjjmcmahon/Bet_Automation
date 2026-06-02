@@ -3,7 +3,7 @@ from backend.services.market_resolver import resolve_selection
 from backend.config.sport_mapping import SPORT_EVENT_TYPE_MAP
 
 
-def find_event_candidates(parsed_bet) -> list:
+def find_event_candidates(parsed_bet, session: dict) -> list:
     """
     Search Betfair for events matching the selection name and sport.
 
@@ -20,10 +20,10 @@ def find_event_candidates(parsed_bet) -> list:
     if not event_type_id:
         raise ValueError(f"Unsupported sport: {sport}")
 
-    return list_events(parsed_bet.selection_name, event_type_id)
+    return list_events(parsed_bet.selection_name, event_type_id, session)
 
 
-def resolve_market(event_id: str, parsed_bet) -> dict:
+def resolve_market(event_id: str, parsed_bet, session: dict) -> dict:
     """
     Given a confirmed event ID, fetch the market and resolve the runner.
 
@@ -40,7 +40,7 @@ def resolve_market(event_id: str, parsed_bet) -> dict:
         If no markets are found for the event, or the named runner is not
         present in the market (e.g. name mismatch after AI extraction).
     """
-    markets = list_market_catalogue(event_id, parsed_bet.market_type)
+    markets = list_market_catalogue(event_id, parsed_bet.market_type, session)
 
     if not markets:
         raise ValueError(f"No {parsed_bet.market_type} market found for event {event_id}")

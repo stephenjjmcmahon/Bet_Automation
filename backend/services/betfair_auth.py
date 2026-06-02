@@ -6,15 +6,15 @@ load_dotenv()
 
 BETFAIR_LOGIN_URL = "https://identitysso.betfair.com/api/login"
 
-# Token lives in memory for the lifetime of the server process.
-# It's cleared on logout or when Betfair returns a 401.
-_session_token: str | None = None
+_SESSION_KEY = "betfair_token"
 
 
-def login(username: str, password: str) -> None:
-    """Call Betfair's Interactive Login endpoint and cache the session token."""
-    global _session_token
+class SessionExpiredError(Exception):
+    pass
 
+
+def login(username: str, password: str, session: dict) -> None:
+    """Call Betfair's Interactive Login endpoint and store the token in the user's session."""
     app_key = os.getenv("BETFAIR_APP_KEY")
 
     # Betfair requires form-encoded body, not JSON
@@ -36,21 +36,17 @@ def login(username: str, password: str) -> None:
         error = body.get("error", "UNKNOWN_ERROR")
         raise ValueError(f"Betfair login failed: {error}")
 
-    _session_token = body["token"]
+    session[_SESSION_KEY] = body["token"]
 
 
-def get_token() -> str:
-    """Return the cached token, or raise if no active session."""
-    if _session_token is None:
+def get_token(session: dict) -> str:
+    """Return the token from this user's session, or raise if not logged in."""
+    token = session.get(_SESSION_KEY)
+    if token is None:
         raise SessionExpiredError("Not logged in")
-    return _session_token
+    return token
 
 
-def clear_token() -> None:
-    """Discard the cached token — called when Betfair returns 401."""
-    global _session_token
-    _session_token = None
-
-
-class SessionExpiredError(Exception):
-    pass
+def clear_token(session: dict) -> None:
+    """Discard the token from this user's session — called when Betfair returns 401."""
+    session.pop(_SESSION_KEY, None)

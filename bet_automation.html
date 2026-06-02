@@ -86,6 +86,10 @@ img{display:block;max-width:100%}
 .btn-place:disabled{opacity:.5;cursor:not-allowed;transform:none}
 .btn-clear{width:100%;border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:var(--space-2) var(--space-5);font-size:var(--text-sm);color:var(--color-text-muted);transition:background var(--transition-interactive),color var(--transition-interactive)}
 .btn-clear:hover{background:var(--color-surface-offset);color:var(--color-text)}
+.slip-header-right{display:flex;align-items:center;gap:var(--space-2)}
+.slip-alt-hint{font-size:var(--text-xs);color:var(--color-text-faint);white-space:nowrap}
+.btn-dismiss{display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:var(--radius-full);color:var(--color-text-muted);flex-shrink:0;transition:background var(--transition-interactive),color var(--transition-interactive)}
+.btn-dismiss:hover{background:var(--color-error-highlight);color:var(--color-error)}
 .banner{border-radius:var(--radius-lg);padding:var(--space-3) var(--space-4);font-size:var(--text-sm);display:flex;align-items:flex-start;gap:var(--space-2);animation:fadeIn 180ms ease}
 .banner-error{background:var(--color-error-highlight);color:var(--color-error);border:1px solid color-mix(in oklch,var(--color-error) 30%,transparent)}
 .banner-success{background:var(--color-success-highlight);color:var(--color-success);border:1px solid color-mix(in oklch,var(--color-success) 30%,transparent)}
@@ -205,9 +209,10 @@ img{display:block;max-width:100%}
   </main>
 </div>
 <script>
-const API='http://localhost:8000';
+const API='';
 let history=[];
 let current=null;
+let slipQueue=[];
 
 (function(){
   const t=document.querySelector('[data-theme-toggle]'),r=document.documentElement;
@@ -224,6 +229,15 @@ async function checkStatus(){
 }
 checkStatus();setInterval(checkStatus,15000);
 
+// On every page load, check if the session cookie still holds a valid token.
+// If so, skip the login overlay — the user is already authenticated.
+(async function checkAuth(){
+  try{
+    const r=await fetch(API+'/api/auth/check',{credentials:'include'});
+    if(r.ok)document.getElementById('login-overlay').classList.add('login-hidden');
+  }catch(e){}
+})();
+
 function fillExample(el){document.getElementById('bet-input').value=el.textContent;document.getElementById('bet-input').focus()}
 
 async function parseBet(){
@@ -236,8 +250,9 @@ async function parseBet(){
   try{
     const res=await apiFetch(API+'/api/prepare',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_input:input})});
     if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.detail||'Failed to prepare bet. Check your input.')}
-    const slip=await res.json();
-    current=slip;
+    const slips=await res.json();
+    slipQueue=slips.slice(1);
+    current=slips[0];
     renderSlip(current);
   }catch(e){
     if(e.message!=='session_expired'){
@@ -263,20 +278,27 @@ function renderSlip(p){
         <span class="slip-sport-badge"><i data-lucide="activity" style="width:11px;height:11px"></i>Match Odds</span>
         <div class="slip-market">${p.competition||'—'}</div>
       </div>
-      <span class="side-badge ${p.side==='BACK'?'side-back':'side-lay'}">${p.side||'BACK'}</span>
+      <div class="slip-header-right">
+        <span class="side-badge ${p.side==='BACK'?'side-back':'side-lay'}">${p.side||'BACK'}</span>
+        ${slipQueue.length>0?`<span class="slip-alt-hint">${slipQueue.length} more</span>`:''}
+        <button class="btn-dismiss" onclick="dismissSlip()" title="Not this event"><i data-lucide="x" style="width:14px;height:14px"></i></button>
+      </div>
     </div>
     <div class="slip-body">
       <div class="slip-selection">${p.event_name||p.selection_name}</div>
       <div style="font-size:var(--text-sm);color:var(--color-text-muted);margin-top:var(--space-1)">Betting on: <strong>${p.selection_name}</strong></div>
       <div class="slip-row">
+        <div class="slip-field"><span class="slip-field-label">Bet Type</span><span class="slip-field-value">${p.side==='BACK'?'Back':'Lay'}</span></div>
         <div class="slip-field"><span class="slip-field-label">Start Time</span><span class="slip-field-value" style="font-size:var(--text-sm)">${startTime}</span></div>
-        <div class="slip-field"><span class="slip-field-label">Live Odds</span><span class="slip-field-value price">${price.toFixed(2)}</span></div>
       </div>
       <div class="slip-row">
+        <div class="slip-field"><span class="slip-field-label">Live Odds</span><span class="slip-field-value price">${price.toFixed(2)}</span></div>
         <div class="slip-field"><span class="slip-field-label">Stake</span><span class="slip-field-value">£${stake.toFixed(2)}</span></div>
-        <div class="slip-field"><span class="slip-field-label">Potential Return</span><span class="slip-field-value price">£${ret}</span></div>
       </div>
-      <div style="font-size:var(--text-xs);color:var(--color-text-muted)">Profit: <strong style="color:var(--color-primary);font-family:var(--font-mono)">£${profit}</strong></div>
+      <div class="slip-row">
+        <div class="slip-field"><span class="slip-field-label">Potential Return</span><span class="slip-field-value price">£${ret}</span></div>
+        <div class="slip-field"><span class="slip-field-label">Profit</span><span class="slip-field-value price">£${profit}</span></div>
+      </div>
     </div>
     <div class="slip-divider"></div>
     <div class="slip-actions">
@@ -324,8 +346,20 @@ async function placeBet(){
 
 function clearSlip(){
   current=null;
+  slipQueue=[];
   document.getElementById('betslip-panel').innerHTML=`<div class="empty-slip"><i data-lucide="receipt" style="width:36px;height:36px" class="empty-slip-icon"></i><h3>Bet slip is empty</h3><p>Parse a bet on the left to see your bet slip here</p></div>`;
   lucide.createIcons();
+}
+
+function dismissSlip(){
+  if(slipQueue.length>0){
+    current=slipQueue.shift();
+    renderSlip(current);
+  } else {
+    current=null;
+    document.getElementById('betslip-panel').innerHTML=`<div class="empty-slip"><i data-lucide="message-circle" style="width:36px;height:36px" class="empty-slip-icon"></i><h3>No more matches found</h3><p>Please provide more context</p></div>`;
+    lucide.createIcons();
+  }
 }
 
 function addHistory(bet){
@@ -348,7 +382,7 @@ async function doLogin(){
   if(!username||!password){errEl.innerHTML='<div class="banner banner-error" style="margin-top:0"><span>Please enter both username and password.</span></div>';return;}
   btn.disabled=true;btnTxt.textContent='Signing in…';errEl.innerHTML='';
   try{
-    const res=await fetch(API+'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});
+    const res=await fetch(API+'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({username,password})});
     if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.detail||'Login failed. Check your credentials.')}
     document.getElementById('login-overlay').classList.add('login-hidden');
     document.getElementById('login-password').value='';
@@ -371,6 +405,7 @@ function showLoginPrompt(reason){
 // Wrapper around fetch that intercepts 401s from any endpoint and re-prompts login
 // instead of silently failing or showing a generic error.
 async function apiFetch(url,options={}){
+  options.credentials='include';
   const res=await fetch(url,options);
   if(res.status===401){
     showLoginPrompt('Your session has expired — please sign in again.');
@@ -380,7 +415,4 @@ async function apiFetch(url,options={}){
 }
 </script>
 </body>
-</html>""")
-
-print("Written to:", path)
-print("Size:", os.path.getsize(path), "bytes")
+</html>
