@@ -17,6 +17,9 @@
    # macOS/Linux
    source venv/bin/activate
 
+   # Git Bash
+   source venv/Scripts/activate
+
    # Windows
    venv\Scripts\activate
 ```

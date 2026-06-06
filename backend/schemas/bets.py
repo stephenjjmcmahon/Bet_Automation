@@ -30,7 +30,7 @@ class PreparedSlip(BaseModel):
     slip_id: str
     event_id: str
     market_id: str
-    selection_id: str
+    selection_id: int
     selection_name: str
     event_name: Optional[str] = None
     competition: Optional[str] = None

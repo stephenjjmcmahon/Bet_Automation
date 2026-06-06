@@ -9,7 +9,8 @@ from pydantic import BaseModel
 
 from backend.schemas.bets import BetRequest, PreparedSlip
 from backend.services.ai_interpreter import AIInterpreter
-from backend.services.search_service import find_event_candidates, resolve_market, get_upcoming_fixtures
+from backend.services.search_service import find_event_candidates, find_all_events_for_sport, resolve_market, get_upcoming_fixtures
+from backend.config.sport_mapping import COMPETITION_SPORTS
 from backend.services.betslips_service import create_betslip
 from backend.services.betfair_client import place_orders
 from backend.services.odds_service import get_best_price, MarketSuspendedError, InsufficientLiquidityError
@@ -94,8 +95,16 @@ def prepare_bet(request: Request, body: BetRequest):
 
     parsed_bet = clarification.parsed_bet
 
-    candidates = find_event_candidates(parsed_bet, request.session)
+    if parsed_bet.sport.lower() in COMPETITION_SPORTS:
+        candidates = find_all_events_for_sport(parsed_bet.sport, request.session)
+    else:
+        candidates = find_event_candidates(parsed_bet, request.session)
+
+    print(f"DEBUG candidates count: {len(candidates)}")
+    print(f"DEBUG first 3 candidates: {[c['event']['name'] for c in candidates[:3]]}")
+
     event_ids = AIInterpreter.select_top_events(body.user_input, candidates)
+    print(f"DEBUG event_ids selected: {event_ids}")
 
     if not event_ids:
         logger.log_failure(
@@ -116,7 +125,8 @@ def prepare_bet(request: Request, body: BetRequest):
 
         try:
             market_ids = resolve_market(event_id, parsed_bet, request.session)
-        except ValueError:
+        except ValueError as e:
+            print(f"DEBUG resolve_market failed for {event_id}: {e}")
             continue
 
         try:
@@ -197,6 +207,9 @@ def prepare_bet(request: Request, body: BetRequest):
 
 @router.post("/api/confirm/{slip_id}", dependencies=[Depends(_require_session)])
 def confirm_bet(slip_id: str, request: Request, body: ConfirmRequest = ConfirmRequest()):
+    print(f"DEBUG confirm session keys: {list(request.session.keys())}")
+    print(f"DEBUG pending_slips in session: {list(request.session.get('pending_slips', {}).keys())}")
+    print(f"DEBUG looking for slip_id: {slip_id}")
     created_at = pending_slips.get_created_at(request.session, slip_id)
     betslip = pending_slips.pop(request.session, slip_id)
 

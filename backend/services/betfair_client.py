@@ -17,11 +17,13 @@ def betfair_post(path: str, payload: dict, session: dict):
 
     r = requests.post(BETFAIR_ENDPOINT + path, json=payload, headers=headers)
 
-    if r.status_code == 401:
+    if r.status_code == 401 or "INVALID_SESSION_INFORMATION" in r.text:
         clear_token(session)
         raise SessionExpiredError("Betfair session expired — please log in again")
 
-    r.raise_for_status()
+    if not r.ok:
+        raise ValueError(f"Betfair {r.status_code} error on {path}: {r.text}")
+
     return r.json()
 
 

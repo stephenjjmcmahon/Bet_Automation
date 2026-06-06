@@ -7,14 +7,20 @@ _STORE_KEY = "pending_slips"
 
 
 def save(session: dict, slip_id: str, betslip: dict) -> None:
-    # Initialise the per-user slip store if this is their first slip.
-    if _STORE_KEY not in session:
-        session[_STORE_KEY] = {}
-    # created_at is stored as an ISO string because session data is JSON-serialised.
-    session[_STORE_KEY][slip_id] = {
-        "betslip": betslip,
-        "created_at": datetime.now(timezone.utc).isoformat(),
+    store = session.get(_STORE_KEY, {})
+
+    # Purge expired entries to keep the session cookie under the 4KB browser limit.
+    now = datetime.now(timezone.utc)
+    store = {
+        k: v for k, v in store.items()
+        if now - datetime.fromisoformat(v["created_at"]) <= timedelta(seconds=SLIP_TTL_SECONDS)
     }
+
+    store[slip_id] = {
+        "betslip": betslip,
+        "created_at": now.isoformat(),
+    }
+    session[_STORE_KEY] = store
 
 
 def get_created_at(session: dict, slip_id: str) -> datetime | None:

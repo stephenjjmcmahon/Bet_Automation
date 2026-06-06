@@ -1,6 +1,13 @@
-from backend.services.betfair_client import list_events, list_market_catalogue
+from backend.services.betfair_client import betfair_post, list_events, list_market_catalogue
 from backend.services.market_resolver import resolve_selection
-from backend.config.sport_mapping import SPORT_EVENT_TYPE_MAP
+from backend.config.sport_mapping import SPORT_EVENT_TYPE_MAP, MARKET_TYPE_OVERRIDES
+
+
+def find_all_events_for_sport(sport: str, session: dict) -> list:
+    event_type_id = SPORT_EVENT_TYPE_MAP.get(sport.lower())
+    if not event_type_id:
+        raise ValueError(f"Unsupported sport: {sport}")
+    return betfair_post("listEvents/", {"filter": {"eventTypeIds": [event_type_id]}}, session)
 
 
 def find_event_candidates(parsed_bet, session: dict) -> list:
@@ -14,12 +21,16 @@ def find_event_candidates(parsed_bet, session: dict) -> list:
 
 
 def resolve_market(event_id: str, parsed_bet, session: dict) -> dict:
-    markets = list_market_catalogue(event_id, parsed_bet.market_type, session)
+    sport = parsed_bet.sport.lower()
+    overrides = MARKET_TYPE_OVERRIDES.get(sport, {})
+    market_type = overrides.get(parsed_bet.market_type, parsed_bet.market_type)
+
+    markets = list_market_catalogue(event_id, market_type, session)
 
     if not markets:
-        raise ValueError(f"No {parsed_bet.market_type} market found for event {event_id}")
+        raise ValueError(f"No {market_type} market found for event {event_id}")
 
-    market = markets[0]
+    market = markets[0] # TODO: Not sure if this is required instead can just return first market
     selection_id = resolve_selection(market["runners"], parsed_bet.selection_name)
 
     if selection_id is None:
