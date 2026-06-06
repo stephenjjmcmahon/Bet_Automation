@@ -17,8 +17,6 @@ def betfair_post(path: str, payload: dict, session: dict):
 
     r = requests.post(BETFAIR_ENDPOINT + path, json=payload, headers=headers)
 
-    # Token expires after ~4hrs of inactivity. Clear it so the next request
-    # triggers a re-login prompt rather than looping on stale credentials.
     if r.status_code == 401:
         clear_token(session)
         raise SessionExpiredError("Betfair session expired — please log in again")

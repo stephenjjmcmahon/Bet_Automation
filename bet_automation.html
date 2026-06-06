@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Bet Automation</title>
+<title>BetAuto</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -15,9 +15,9 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;scroll-behavior:smooth}
 body{min-height:100dvh;font-family:var(--font-body);font-size:var(--text-base);color:var(--color-text);background:var(--color-bg);line-height:1.5}
+img{display:block;max-width:100%}
 button{cursor:pointer;background:none;border:none;font:inherit;color:inherit}
 input,textarea,select{font:inherit;color:inherit}
-img{display:block;max-width:100%}
 ::selection{background:oklch(from var(--color-primary) l c h/0.2)}
 :focus-visible{outline:2px solid var(--color-primary);outline-offset:3px;border-radius:var(--radius-sm)}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:0.01ms!important;transition-duration:0.01ms!important}}
@@ -49,9 +49,30 @@ img{display:block;max-width:100%}
 .btn-parse:active{background:var(--color-primary-active);transform:scale(0.99)}
 .btn-parse:disabled{opacity:.5;cursor:not-allowed;transform:none}
 @keyframes spin{to{transform:rotate(360deg)}}
-.spinner{width:16px;height:16px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite}
+.spinner{width:16px;height:16px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
 @keyframes slideUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+/* Clarification */
+.clarify-box{margin-top:var(--space-3);background:var(--color-primary-highlight);border:1px solid color-mix(in oklch,var(--color-primary) 30%,transparent);border-radius:var(--radius-lg);padding:var(--space-4);animation:fadeIn 200ms ease}
+.clarify-question{font-size:var(--text-sm);font-weight:600;color:var(--color-text);margin-bottom:var(--space-3);display:flex;align-items:center;gap:var(--space-2)}
+.fixture-list{display:flex;flex-direction:column;gap:var(--space-2);margin-bottom:var(--space-3)}
+.fixture-card{background:var(--color-surface-2);border:1.5px solid var(--color-border);border-radius:var(--radius-lg);padding:var(--space-3) var(--space-4);cursor:pointer;transition:border-color var(--transition-interactive),box-shadow var(--transition-interactive),background var(--transition-interactive);display:flex;align-items:center;justify-content:space-between;gap:var(--space-3)}
+.fixture-card:hover{border-color:var(--color-primary);box-shadow:0 0 0 3px color-mix(in oklch,var(--color-primary) 12%,transparent)}
+.fixture-card.selected{border-color:var(--color-primary);background:color-mix(in oklch,var(--color-primary) 8%,var(--color-surface-2));box-shadow:0 0 0 3px color-mix(in oklch,var(--color-primary) 15%,transparent)}
+.fixture-teams{font-size:var(--text-sm);font-weight:600;color:var(--color-text)}
+.fixture-date{font-size:var(--text-xs);color:var(--color-text-muted);margin-top:2px}
+.fixture-check{width:20px;height:20px;border-radius:var(--radius-full);border:2px solid var(--color-border);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all var(--transition-interactive)}
+.fixture-card.selected .fixture-check{background:var(--color-primary);border-color:var(--color-primary);color:white}
+.fixture-loading{display:flex;align-items:center;gap:var(--space-2);color:var(--color-text-muted);font-size:var(--text-sm);padding:var(--space-3) 0}
+.stake-clarify-row{display:flex;gap:var(--space-2);align-items:center;margin-top:var(--space-2)}
+.stake-prefix-wrap{position:relative;flex:1}
+.stake-prefix-sym{position:absolute;left:var(--space-3);top:50%;transform:translateY(-50%);color:var(--color-text-muted);font-size:var(--text-sm);pointer-events:none}
+.stake-clarify-input{width:100%;background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:var(--space-2) var(--space-3) var(--space-2) var(--space-6);font-family:var(--font-mono);font-size:var(--text-base);font-weight:500;transition:border-color var(--transition-interactive),box-shadow var(--transition-interactive)}
+.stake-clarify-input:focus{outline:none;border-color:var(--color-primary);box-shadow:0 0 0 3px color-mix(in oklch,var(--color-primary) 15%,transparent)}
+.btn-confirm-clarify{background:var(--color-primary);color:var(--color-text-inverse);border-radius:var(--radius-md);padding:var(--space-2) var(--space-4);font-size:var(--text-sm);font-weight:600;white-space:nowrap;transition:background var(--transition-interactive)}
+.btn-confirm-clarify:hover{background:var(--color-primary-hover)}
+.btn-confirm-clarify:disabled{opacity:.5;cursor:not-allowed}
+/* Slip */
 .empty-slip{background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-xl);padding:var(--space-10) var(--space-6);display:flex;flex-direction:column;align-items:center;text-align:center;gap:var(--space-3);box-shadow:var(--shadow-sm)}
 .empty-slip-icon{color:var(--color-text-faint)}
 .empty-slip h3{font-size:var(--text-sm);font-weight:600;color:var(--color-text)}
@@ -64,6 +85,10 @@ img{display:block;max-width:100%}
 .side-badge{font-size:var(--text-xs);font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:var(--space-1) var(--space-3);border-radius:var(--radius-full)}
 .side-back{background:var(--color-blue);color:#fff}
 .side-lay{background:var(--color-gold);color:#fff}
+.slip-header-right{display:flex;align-items:center;gap:var(--space-2)}
+.slip-alt-hint{font-size:var(--text-xs);color:var(--color-text-faint);white-space:nowrap}
+.btn-dismiss{display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:var(--radius-full);color:var(--color-text-muted);flex-shrink:0;transition:background var(--transition-interactive),color var(--transition-interactive)}
+.btn-dismiss:hover{background:var(--color-error-highlight);color:var(--color-error)}
 .slip-body{padding:var(--space-5);display:flex;flex-direction:column;gap:var(--space-4)}
 .slip-selection{font-size:var(--text-lg);font-weight:700;color:var(--color-text);line-height:1.2}
 .slip-row{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3)}
@@ -86,14 +111,27 @@ img{display:block;max-width:100%}
 .btn-place:disabled{opacity:.5;cursor:not-allowed;transform:none}
 .btn-clear{width:100%;border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:var(--space-2) var(--space-5);font-size:var(--text-sm);color:var(--color-text-muted);transition:background var(--transition-interactive),color var(--transition-interactive)}
 .btn-clear:hover{background:var(--color-surface-offset);color:var(--color-text)}
-.slip-header-right{display:flex;align-items:center;gap:var(--space-2)}
-.slip-alt-hint{font-size:var(--text-xs);color:var(--color-text-faint);white-space:nowrap}
-.btn-dismiss{display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:var(--radius-full);color:var(--color-text-muted);flex-shrink:0;transition:background var(--transition-interactive),color var(--transition-interactive)}
-.btn-dismiss:hover{background:var(--color-error-highlight);color:var(--color-error)}
 .banner{border-radius:var(--radius-lg);padding:var(--space-3) var(--space-4);font-size:var(--text-sm);display:flex;align-items:flex-start;gap:var(--space-2);animation:fadeIn 180ms ease}
 .banner-error{background:var(--color-error-highlight);color:var(--color-error);border:1px solid color-mix(in oklch,var(--color-error) 30%,transparent)}
 .banner-success{background:var(--color-success-highlight);color:var(--color-success);border:1px solid color-mix(in oklch,var(--color-success) 30%,transparent)}
 .banner-icon{flex-shrink:0;margin-top:1px}
+/* Feedback */
+.feedback-bar{display:flex;align-items:center;gap:var(--space-2);padding:var(--space-3) var(--space-4);background:var(--color-surface-offset);border-top:1px solid var(--color-divider);font-size:var(--text-xs);color:var(--color-text-muted)}
+.feedback-label{flex:1}
+.feedback-btns{display:flex;gap:var(--space-1)}
+.fb-btn{width:32px;height:32px;border-radius:var(--radius-md);display:flex;align-items:center;justify-content:center;border:1px solid var(--color-border);background:var(--color-surface-2);transition:background var(--transition-interactive),border-color var(--transition-interactive);font-size:15px;line-height:1}
+.fb-btn:hover{background:var(--color-surface-offset)}
+.fb-btn.active-up{background:var(--color-success-highlight);border-color:var(--color-success);color:var(--color-success)}
+.fb-btn.active-down{background:var(--color-error-highlight);border-color:var(--color-error);color:var(--color-error)}
+.feedback-note-wrap{padding:0 var(--space-4) var(--space-4);display:flex;flex-direction:column;gap:var(--space-2);animation:slideUp 200ms cubic-bezier(0.16,1,0.3,1)}
+.feedback-note-input{width:100%;background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:var(--space-2) var(--space-3);font-size:var(--text-sm);color:var(--color-text);resize:none;min-height:60px}
+.feedback-note-input:focus{outline:none;border-color:var(--color-error);box-shadow:0 0 0 3px color-mix(in oklch,var(--color-error) 15%,transparent)}
+.feedback-note-row{display:flex;gap:var(--space-2);justify-content:flex-end}
+.btn-feedback-submit{background:var(--color-error);color:#fff;border-radius:var(--radius-md);padding:var(--space-2) var(--space-4);font-size:var(--text-xs);font-weight:600;transition:background var(--transition-interactive)}
+.btn-feedback-cancel{border:1px solid var(--color-border);border-radius:var(--radius-md);padding:var(--space-2) var(--space-4);font-size:var(--text-xs);color:var(--color-text-muted);transition:background var(--transition-interactive)}
+.btn-feedback-cancel:hover{background:var(--color-surface-offset)}
+.feedback-sent{padding:var(--space-2) var(--space-4) var(--space-3);font-size:var(--text-xs);color:var(--color-text-muted);display:flex;align-items:center;gap:var(--space-2);animation:fadeIn 200ms ease}
+/* History */
 .history-table{width:100%;border-collapse:collapse;font-size:var(--text-sm)}
 .history-table th{text-align:left;padding:var(--space-2) var(--space-4);font-size:var(--text-xs);font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--color-text-muted);border-bottom:1px solid var(--color-divider);white-space:nowrap}
 .history-table td{padding:var(--space-3) var(--space-4);border-bottom:1px solid var(--color-divider);vertical-align:middle}
@@ -107,6 +145,7 @@ img{display:block;max-width:100%}
 .status-pending{background:var(--color-surface-offset);color:var(--color-text-muted)}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border-width:0}
 @media(max-width:768px){.main{grid-template-columns:1fr;padding:var(--space-4);gap:var(--space-4)}.betslip{order:-1}.slip-row{grid-template-columns:1fr}.header{padding:var(--space-3) var(--space-4)}}
+/* Login */
 .login-overlay{position:fixed;inset:0;background:var(--color-bg);display:flex;align-items:center;justify-content:center;z-index:100;padding:var(--space-4)}
 .login-card{background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-xl);padding:var(--space-8);width:100%;max-width:400px;box-shadow:var(--shadow-lg);display:flex;flex-direction:column;gap:var(--space-5)}
 .login-logo{display:flex;align-items:center;gap:var(--space-2);color:var(--color-primary);margin-bottom:var(--space-2)}
@@ -189,6 +228,7 @@ img{display:block;max-width:100%}
             <span id="parse-btn-text">Parse Bet</span>
           </button>
           <div id="parse-error"></div>
+          <div id="clarify-area"></div>
         </div>
       </div>
       <div class="panel">
@@ -209,99 +249,337 @@ img{display:block;max-width:100%}
   </main>
 </div>
 <script>
-const API='';
-let history=[];
-let current=null;
-let slipQueue=[];
+const API = '';
+let betHistory = [];
+let current = null;
+let slipQueue = [];
+let pendingParsed = null;
+let selectedFixture = null;
 
-(function(){
-  const t=document.querySelector('[data-theme-toggle]'),r=document.documentElement;
-  let d=matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';
-  r.setAttribute('data-theme',d);setIcon(t,d);
-  t&&t.addEventListener('click',()=>{d=d==='dark'?'light':'dark';r.setAttribute('data-theme',d);setIcon(t,d)});
-  function setIcon(t,d){if(!t)return;t.innerHTML=d==='dark'?'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>':'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>'}
+(function() {
+  const t = document.querySelector('[data-theme-toggle]'), r = document.documentElement;
+  let d = matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light';
+  r.setAttribute('data-theme', d); setIcon(t, d);
+  t && t.addEventListener('click', () => { d = d === 'dark' ? 'light' : 'dark'; r.setAttribute('data-theme', d); setIcon(t, d); });
+  function setIcon(t, d) {
+    if (!t) return;
+    t.innerHTML = d === 'dark'
+      ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>'
+      : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+  }
 })();
 
-async function checkStatus(){
-  const dot=document.getElementById('status-dot'),txt=document.getElementById('status-text');
-  try{const r=await fetch(API+'/docs',{method:'HEAD',signal:AbortSignal.timeout(3000)});if(r.ok||r.status===200){dot.classList.add('online');txt.textContent='Connected'}else throw 0}
-  catch{dot.classList.remove('online');txt.textContent='Offline'}
+async function checkStatus() {
+  const dot = document.getElementById('status-dot'), txt = document.getElementById('status-text');
+  try {
+    const r = await fetch(API + '/docs', { method: 'HEAD', signal: AbortSignal.timeout(3000) });
+    if (r.ok || r.status === 200) { dot.classList.add('online'); txt.textContent = 'Connected'; } else throw 0;
+  } catch { dot.classList.remove('online'); txt.textContent = 'Offline'; }
 }
-checkStatus();setInterval(checkStatus,15000);
+checkStatus(); setInterval(checkStatus, 15000);
 
-// On every page load, check if the session cookie still holds a valid token.
-// If so, skip the login overlay — the user is already authenticated.
-(async function checkAuth(){
-  try{
-    const r=await fetch(API+'/api/auth/check',{credentials:'include'});
-    if(r.ok)document.getElementById('login-overlay').classList.add('login-hidden');
-  }catch(e){}
+(async function checkAuth() {
+  try {
+    const r = await fetch(API + '/api/auth/check', { credentials: 'include' });
+    if (r.ok) document.getElementById('login-overlay').classList.add('login-hidden');
+  } catch(e) {}
 })();
 
-function fillExample(el){document.getElementById('bet-input').value=el.textContent;document.getElementById('bet-input').focus()}
+async function apiFetch(url, options = {}) {
+  options.credentials = 'include';
+  const res = await fetch(url, options);
+  if (res.status === 401) {
+    showLoginPrompt('Your session has expired — please sign in again.');
+    throw new Error('session_expired');
+  }
+  return res;
+}
 
-async function parseBet(){
-  const input=document.getElementById('bet-input').value.trim();
-  if(!input)return;
-  const btn=document.getElementById('parse-btn'),btnTxt=document.getElementById('parse-btn-text'),errEl=document.getElementById('parse-error');
-  btn.disabled=true;btnTxt.textContent='Preparing…';
-  const ic=btn.querySelector('[data-lucide]');if(ic)ic.outerHTML='<span class="spinner"></span>';
-  errEl.innerHTML='';
-  try{
-    const res=await apiFetch(API+'/api/prepare',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_input:input})});
-    if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.detail||'Failed to prepare bet. Check your input.')}
-    const slips=await res.json();
-    slipQueue=slips.slice(1);
-    current=slips[0];
-    renderSlip(current);
-  }catch(e){
-    if(e.message!=='session_expired'){
-      errEl.innerHTML=`<div class="banner banner-error" style="margin-top:var(--space-3)"><i data-lucide="alert-circle" class="banner-icon" style="width:16px;height:16px"></i><span>${e.message}</span></div>`;
+async function doLogin() {
+  const username = document.getElementById('login-username').value.trim();
+  const password = document.getElementById('login-password').value;
+  const btn = document.getElementById('login-btn'), btnTxt = document.getElementById('login-btn-text');
+  const errEl = document.getElementById('login-error');
+  if (!username || !password) { errEl.innerHTML = '<div class="banner banner-error" style="margin-top:0"><span>Please enter both username and password.</span></div>'; return; }
+  btn.disabled = true; btnTxt.textContent = 'Signing in…'; errEl.innerHTML = '';
+  try {
+    const res = await fetch(API + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ username, password }) });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || 'Login failed. Check your credentials.'); }
+    document.getElementById('login-overlay').classList.add('login-hidden');
+    document.getElementById('login-password').value = '';
+  } catch(e) {
+    errEl.innerHTML = `<div class="banner banner-error" style="margin-top:0"><span>${e.message}</span></div>`;
+    btn.disabled = false; btnTxt.textContent = 'Sign in';
+  }
+}
+
+function showLoginPrompt(reason) {
+  const overlay = document.getElementById('login-overlay');
+  document.getElementById('login-subtitle').textContent = reason || 'Enter your Betfair credentials to continue';
+  overlay.classList.remove('login-hidden');
+  document.getElementById('login-username').focus();
+}
+
+function fillExample(el) { document.getElementById('bet-input').value = el.textContent.trim(); document.getElementById('bet-input').focus(); }
+
+function formatEventTime(iso) {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  } catch { return iso; }
+}
+
+function formatEventDate(iso) {
+  if (!iso) return null;
+  try {
+    const d = new Date(iso);
+    const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return days[d.getDay()] + ' ' + d.getDate() + ' ' + months[d.getMonth()] + ' · ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+  } catch { return null; }
+}
+
+// ── Parse / Prepare ───────────────────────────────────────────────────────────
+
+async function callPrepare(userInput) {
+  return apiFetch(API + '/api/prepare', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_input: userInput })
+  });
+}
+
+async function handlePrepareResponse(res, fallbackInput) {
+  if (res.status === 422) {
+    const e = await res.json().catch(() => ({}));
+    const detail = e.detail || {};
+    if (detail.status === 'clarification_needed') {
+      pendingParsed = detail.parsed_bet;
+      const missing = detail.missing_fields || [];
+      const needsFixture = missing.includes('stake') && detail.parsed_bet?.selection_name;
+      if (needsFixture) {
+        renderFixturePicker(detail.parsed_bet, detail.clarification_question);
+      } else {
+        renderGenericClarify(detail.clarification_question, fallbackInput);
+      }
+      return false;
+    }
+    throw new Error(detail.detail || 'Validation error.');
+  }
+  if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || 'Failed to prepare bet.'); }
+  const slips = await res.json();
+  slipQueue = slips.slice(1);
+  current = slips[0];
+  document.getElementById('clarify-area').innerHTML = '';
+  renderSlip(current);
+  return true;
+}
+
+async function parseBet() {
+  const input = document.getElementById('bet-input').value.trim();
+  if (!input) return;
+  const btn = document.getElementById('parse-btn'), btnTxt = document.getElementById('parse-btn-text'), errEl = document.getElementById('parse-error');
+  btn.disabled = true; btnTxt.textContent = 'Preparing…';
+  const ic = btn.querySelector('[data-lucide]'); if (ic) ic.outerHTML = '<span class="spinner"></span>';
+  errEl.innerHTML = ''; document.getElementById('clarify-area').innerHTML = '';
+  selectedFixture = null; pendingParsed = null;
+  try {
+    const res = await callPrepare(input);
+    await handlePrepareResponse(res, input);
+  } catch(e) {
+    if (e.message !== 'session_expired') {
+      errEl.innerHTML = `<div class="banner banner-error" style="margin-top:var(--space-3)"><i data-lucide="alert-circle" class="banner-icon" style="width:16px;height:16px"></i><span>${e.message}</span></div>`;
       lucide.createIcons();
     }
-  }finally{
-    btn.disabled=false;btnTxt.textContent='Parse Bet';
-    const sp=btn.querySelector('.spinner');if(sp)sp.outerHTML='<i data-lucide="zap" style="width:16px;height:16px"></i>';
+  } finally {
+    btn.disabled = false; btnTxt.textContent = 'Parse Bet';
+    const sp = btn.querySelector('.spinner'); if (sp) sp.outerHTML = '<i data-lucide="zap" style="width:16px;height:16px"></i>';
     lucide.createIcons();
   }
 }
 
-function renderSlip(p){
-  const stake=p.stake||0,price=p.price||0;
-  const ret=(p.projected_return||stake*price).toFixed(2);
-  const profit=(p.projected_return?p.projected_return-stake:stake*(price-1)).toFixed(2);
-  const startTime=p.event_start_time?formatEventTime(p.event_start_time):'—';
-  document.getElementById('betslip-panel').innerHTML=`
+// ── Clarification ─────────────────────────────────────────────────────────────
+
+async function renderFixturePicker(partialBet, question) {
+  const clarifyEl = document.getElementById('clarify-area');
+  const sport = (partialBet.sport || 'football').toLowerCase();
+  const team = partialBet.selection_name;
+
+  clarifyEl.innerHTML = `<div class="clarify-box">
+    <div class="clarify-question"><i data-lucide="help-circle" style="width:15px;height:15px;flex-shrink:0"></i><span>${question || 'How much would you like to stake on ' + team + '?'}</span></div>
+    <div id="fixture-list-wrap"><div class="fixture-loading"><span class="spinner"></span><span>Finding upcoming matches…</span></div></div>
+    <div id="stake-clarify-section" style="display:none">
+      <div style="font-size:var(--text-xs);color:var(--color-text-muted);margin-bottom:var(--space-2);font-weight:500">STAKE</div>
+      <div class="stake-clarify-row">
+        <div class="stake-prefix-wrap"><span class="stake-prefix-sym">£</span><input class="stake-clarify-input" id="stake-clarify-input" type="number" min="0.01" step="0.01" placeholder="0.00" aria-label="Stake amount"></div>
+        <button class="btn-confirm-clarify" id="confirm-clarify-btn" onclick="confirmClarify()" disabled>Confirm</button>
+      </div>
+    </div>
+  </div>`;
+  lucide.createIcons();
+
+  try {
+    const res = await apiFetch(API + '/api/fixtures', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ team_name: team, sport }) });
+    const data = await res.json();
+    renderFixtureCards(data.fixtures || [], team);
+  } catch(e) {
+    const wrap = document.getElementById('fixture-list-wrap');
+    if (wrap) wrap.innerHTML = '<div style="font-size:var(--text-xs);color:var(--color-text-muted);padding:var(--space-2) 0">Could not load fixtures — enter your stake to proceed.</div>';
+    showStakeClarify();
+  }
+}
+
+function renderFixtureCards(fixtures, team) {
+  const wrap = document.getElementById('fixture-list-wrap');
+  if (!fixtures.length) {
+    wrap.innerHTML = '<div style="font-size:var(--text-xs);color:var(--color-text-muted);padding:var(--space-2) 0">No upcoming fixtures found — enter your stake to proceed.</div>';
+    showStakeClarify(); return;
+  }
+  let html = '<div class="fixture-list" id="fixture-list">';
+  fixtures.forEach((f, i) => {
+    const dateStr = f.eventDate ? formatEventDate(f.eventDate) : '';
+    html += `<div class="fixture-card" id="fixture-${i}" onclick="selectFixture(${i})" role="button" tabindex="0" aria-pressed="false">
+      <div><div class="fixture-teams">${f.eventName || f.opponent || 'Match ' + (i+1)}</div>${dateStr ? `<div class="fixture-date">${dateStr}</div>` : ''}</div>
+      <div class="fixture-check" id="fixture-check-${i}"></div>
+    </div>`;
+  });
+  html += '</div>';
+  wrap.innerHTML = html;
+  wrap._fixtures = fixtures;
+  showStakeClarify();
+  lucide.createIcons();
+}
+
+function selectFixture(idx) {
+  const wrap = document.getElementById('fixture-list-wrap');
+  const fixtures = wrap._fixtures || [];
+  selectedFixture = fixtures[idx];
+  fixtures.forEach((_, i) => {
+    const card = document.getElementById('fixture-' + i);
+    const check = document.getElementById('fixture-check-' + i);
+    if (i === idx) { card.classList.add('selected'); card.setAttribute('aria-pressed', 'true'); check.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>'; }
+    else { card.classList.remove('selected'); card.setAttribute('aria-pressed', 'false'); check.innerHTML = ''; }
+  });
+  checkClarifyReady();
+}
+
+function showStakeClarify() {
+  const section = document.getElementById('stake-clarify-section');
+  if (section) {
+    section.style.display = 'block';
+    const inp = document.getElementById('stake-clarify-input');
+    if (inp) inp.addEventListener('input', checkClarifyReady);
+  }
+}
+
+function checkClarifyReady() {
+  const btn = document.getElementById('confirm-clarify-btn');
+  const inp = document.getElementById('stake-clarify-input');
+  if (!btn || !inp) return;
+  const stakeOk = parseFloat(inp.value) > 0;
+  const fixtureListExists = !!document.getElementById('fixture-list');
+  const fixtureOk = !fixtureListExists || selectedFixture !== null;
+  btn.disabled = !(stakeOk && fixtureOk);
+}
+
+async function confirmClarify() {
+  const inp = document.getElementById('stake-clarify-input');
+  const stake = parseFloat(inp ? inp.value : 0);
+  if (!stake || stake <= 0) return;
+  const btn = document.getElementById('confirm-clarify-btn');
+  btn.disabled = true; btn.textContent = 'Preparing…';
+
+  let enrichedInput = document.getElementById('bet-input').value.trim();
+  enrichedInput += ' ' + stake;
+  if (selectedFixture) enrichedInput += ' in the match ' + selectedFixture.eventName;
+
+  const errEl = document.getElementById('parse-error');
+  try {
+    const res = await callPrepare(enrichedInput);
+    const ok = await handlePrepareResponse(res, enrichedInput);
+    if (!ok) { btn.disabled = false; btn.textContent = 'Confirm'; }
+  } catch(e) {
+    if (e.message !== 'session_expired') {
+      errEl.innerHTML = `<div class="banner banner-error" style="margin-top:var(--space-3)"><i data-lucide="alert-circle" class="banner-icon" style="width:16px;height:16px"></i><span>${e.message}</span></div>`;
+      lucide.createIcons();
+    }
+    btn.disabled = false; btn.textContent = 'Confirm';
+  }
+}
+
+function renderGenericClarify(question, originalInput) {
+  const clarifyEl = document.getElementById('clarify-area');
+  clarifyEl.innerHTML = `<div class="clarify-box">
+    <div class="clarify-question"><i data-lucide="help-circle" style="width:15px;height:15px;flex-shrink:0"></i><span>${question}</span></div>
+    <div class="stake-clarify-row">
+      <input style="flex:1;background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:var(--space-2) var(--space-3);font-size:var(--text-base);color:var(--color-text)" id="generic-clarify-input" type="text" placeholder="Type your answer…" aria-label="Clarification">
+      <button class="btn-confirm-clarify" onclick="submitGenericClarify('${encodeURIComponent(originalInput)}')">Submit</button>
+    </div>
+  </div>`;
+  lucide.createIcons();
+  document.getElementById('generic-clarify-input')?.focus();
+}
+
+async function submitGenericClarify(encodedOriginal) {
+  const inp = document.getElementById('generic-clarify-input');
+  const answer = inp ? inp.value.trim() : '';
+  if (!answer) return;
+  const enriched = decodeURIComponent(encodedOriginal) + ' ' + answer;
+  document.getElementById('bet-input').value = enriched;
+  document.getElementById('clarify-area').innerHTML = '';
+  parseBet();
+}
+
+// ── Betslip ───────────────────────────────────────────────────────────────────
+
+function renderSlip(p) {
+  const stake = p.stake || 0, price = p.price || 0;
+  const ret = (stake * price).toFixed(2);
+  const profit = (stake * (price - 1)).toFixed(2);
+  const startTime = p.event_start_time ? formatEventTime(p.event_start_time) : '—';
+
+  document.getElementById('betslip-panel').innerHTML = `
   <div class="betslip-card">
     <div class="slip-header">
       <div class="slip-header-left">
         <span class="slip-sport-badge"><i data-lucide="activity" style="width:11px;height:11px"></i>Match Odds</span>
-        <div class="slip-market">${p.competition||'—'}</div>
+        <div class="slip-market">${p.competition || '—'}</div>
       </div>
       <div class="slip-header-right">
-        <span class="side-badge ${p.side==='BACK'?'side-back':'side-lay'}">${p.side||'BACK'}</span>
-        ${slipQueue.length>0?`<span class="slip-alt-hint">${slipQueue.length} more</span>`:''}
+        <span class="side-badge ${p.side === 'BACK' ? 'side-back' : 'side-lay'}">${p.side || 'BACK'}</span>
+        ${slipQueue.length > 0 ? `<span class="slip-alt-hint">${slipQueue.length} more</span>` : ''}
         <button class="btn-dismiss" onclick="dismissSlip()" title="Not this event"><i data-lucide="x" style="width:14px;height:14px"></i></button>
       </div>
     </div>
     <div class="slip-body">
-      <div class="slip-selection">${p.event_name||p.selection_name}</div>
+      <div class="slip-selection">${p.event_name || p.selection_name}</div>
       <div style="font-size:var(--text-sm);color:var(--color-text-muted);margin-top:var(--space-1)">Betting on: <strong>${p.selection_name}</strong></div>
       <div class="slip-row">
-        <div class="slip-field"><span class="slip-field-label">Bet Type</span><span class="slip-field-value">${p.side==='BACK'?'Back':'Lay'}</span></div>
+        <div class="slip-field"><span class="slip-field-label">Bet Type</span><span class="slip-field-value">${p.side === 'BACK' ? 'Back' : 'Lay'}</span></div>
         <div class="slip-field"><span class="slip-field-label">Start Time</span><span class="slip-field-value" style="font-size:var(--text-sm)">${startTime}</span></div>
       </div>
       <div class="slip-row">
         <div class="slip-field"><span class="slip-field-label">Live Odds</span><span class="slip-field-value price">${price.toFixed(2)}</span></div>
-        <div class="slip-field"><span class="slip-field-label">Stake</span><span class="slip-field-value">£${stake.toFixed(2)}</span></div>
+        <div class="slip-field">
+          <span class="slip-field-label">Stake</span>
+          <div class="stake-wrap"><span class="stake-prefix">£</span><input class="stake-input" id="stake-input" type="number" min="0.01" step="0.01" value="${stake.toFixed(2)}" aria-label="Stake" oninput="updateReturns()"></div>
+        </div>
       </div>
-      <div class="slip-row">
-        <div class="slip-field"><span class="slip-field-label">Potential Return</span><span class="slip-field-value price">£${ret}</span></div>
-        <div class="slip-field"><span class="slip-field-label">Profit</span><span class="slip-field-value price">£${profit}</span></div>
+      <div class="slip-returns">
+        <span class="slip-returns-label">Potential return</span>
+        <span class="slip-returns-value" id="returns-value">£${ret}</span>
       </div>
+      <div style="font-size:var(--text-xs);color:var(--color-text-muted)">Profit if wins: <strong style="color:var(--color-primary);font-family:var(--font-mono)" id="profit-value">£${profit}</strong></div>
     </div>
     <div class="slip-divider"></div>
-    <div class="slip-actions">
+    <div class="feedback-bar" id="feedback-bar">
+      <span class="feedback-label">Was this parsed correctly?</span>
+      <div class="feedback-btns">
+        <button class="fb-btn" id="fb-up" onclick="onThumbsUp()" title="Yes, correct" aria-label="Correct">&#128077;</button>
+        <button class="fb-btn" id="fb-down" onclick="onThumbsDown()" title="No, something wrong" aria-label="Incorrect">&#128078;</button>
+      </div>
+    </div>
+    <div class="slip-actions" id="slip-actions-inner">
       <div id="place-result"></div>
       <button class="btn-place" id="place-btn" onclick="placeBet()">
         <i data-lucide="check-circle" style="width:16px;height:16px"></i>
@@ -313,106 +591,146 @@ function renderSlip(p){
   lucide.createIcons();
 }
 
-function formatEventTime(iso){
-  try{
-    const d=new Date(iso);
-    return d.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})
-      +' '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
-  }catch{return iso;}
+function updateReturns() {
+  const s = document.getElementById('stake-input');
+  const r = document.getElementById('returns-value');
+  const p = document.getElementById('profit-value');
+  if (!s || !current) return;
+  const stake = parseFloat(s.value) || 0;
+  const price = current.price || 0;
+  if (r) r.textContent = '£' + (stake * price).toFixed(2);
+  if (p) p.textContent = '£' + (stake * (price - 1)).toFixed(2);
 }
 
-async function placeBet(){
-  if(!current)return;
-  const btn=document.getElementById('place-btn'),btnTxt=document.getElementById('place-btn-text'),resultEl=document.getElementById('place-result');
-  btn.disabled=true;btnTxt.textContent='Placing…';
-  const ic=btn.querySelector('[data-lucide]');if(ic)ic.outerHTML='<span class="spinner"></span>';
-  try{
-    const res=await apiFetch(API+'/api/confirm/'+current.slip_id,{method:'POST'});
-    if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.detail||'Bet placement failed.')}
-    resultEl.innerHTML=`<div class="banner banner-success" style="margin-bottom:var(--space-2)"><i data-lucide="check-circle" class="banner-icon" style="width:16px;height:16px"></i><span>Bet placed successfully!</span></div>`;
-    addHistory({...current,status:'placed',time:new Date()});
-    lucide.createIcons();
-    setTimeout(()=>clearSlip(),2500);
-  }catch(e){
-    if(e.message==='session_expired')return;
-    resultEl.innerHTML=`<div class="banner banner-error" style="margin-bottom:var(--space-2)"><i data-lucide="x-circle" class="banner-icon" style="width:16px;height:16px"></i><span>${e.message}</span></div>`;
-    addHistory({...current,status:'failed',time:new Date()});
-    lucide.createIcons();
-    btn.disabled=false;btnTxt.textContent='Try Again';
-    const sp=btn.querySelector('.spinner');if(sp)sp.outerHTML='<i data-lucide="refresh-cw" style="width:16px;height:16px"></i>';
-    lucide.createIcons();
-  }
+function dismissSlip() {
+  if (slipQueue.length > 0) { current = slipQueue.shift(); renderSlip(current); }
+  else { current = null; document.getElementById('betslip-panel').innerHTML = `<div class="empty-slip"><i data-lucide="message-circle" style="width:36px;height:36px" class="empty-slip-icon"></i><h3>No more matches found</h3><p>Please provide more context</p></div>`; lucide.createIcons(); }
 }
 
-function clearSlip(){
-  current=null;
-  slipQueue=[];
-  document.getElementById('betslip-panel').innerHTML=`<div class="empty-slip"><i data-lucide="receipt" style="width:36px;height:36px" class="empty-slip-icon"></i><h3>Bet slip is empty</h3><p>Parse a bet on the left to see your bet slip here</p></div>`;
+function clearSlip() {
+  current = null; slipQueue = []; selectedFixture = null; pendingParsed = null;
+  document.getElementById('clarify-area').innerHTML = '';
+  document.getElementById('betslip-panel').innerHTML = `<div class="empty-slip"><i data-lucide="receipt" style="width:36px;height:36px" class="empty-slip-icon"></i><h3>Bet slip is empty</h3><p>Parse a bet on the left to see your bet slip here</p></div>`;
   lucide.createIcons();
 }
 
-function dismissSlip(){
-  if(slipQueue.length>0){
-    current=slipQueue.shift();
-    renderSlip(current);
-  } else {
-    current=null;
-    document.getElementById('betslip-panel').innerHTML=`<div class="empty-slip"><i data-lucide="message-circle" style="width:36px;height:36px" class="empty-slip-icon"></i><h3>No more matches found</h3><p>Please provide more context</p></div>`;
+// ── Place Bet ─────────────────────────────────────────────────────────────────
+
+async function placeBet() {
+  if (!current) return;
+  const stakeEl = document.getElementById('stake-input');
+  const stake = parseFloat(stakeEl ? stakeEl.value : 0) || current.stake;
+  const btn = document.getElementById('place-btn'), btnTxt = document.getElementById('place-btn-text'), resultEl = document.getElementById('place-result');
+  btn.disabled = true; btnTxt.textContent = 'Placing…';
+  const ic = btn.querySelector('[data-lucide]'); if (ic) ic.outerHTML = '<span class="spinner"></span>';
+  try {
+    const res = await apiFetch(API + '/api/confirm/' + current.slip_id, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stake: stake !== current.stake ? stake : null })
+    });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || 'Bet placement failed.'); }
+    resultEl.innerHTML = `<div class="banner banner-success" style="margin-bottom:var(--space-2)"><i data-lucide="check-circle" class="banner-icon" style="width:16px;height:16px"></i><span>Bet placed successfully!</span></div>`;
+    addHistory({ ...current, stake, status: 'placed', time: new Date() });
+    lucide.createIcons();
+    setTimeout(() => clearSlip(), 2500);
+  } catch(e) {
+    if (e.message === 'session_expired') return;
+    resultEl.innerHTML = `<div class="banner banner-error" style="margin-bottom:var(--space-2)"><i data-lucide="x-circle" class="banner-icon" style="width:16px;height:16px"></i><span>${e.message}</span></div>`;
+    addHistory({ ...current, stake, status: 'failed', time: new Date() });
+    lucide.createIcons();
+    btn.disabled = false; btnTxt.textContent = 'Try Again';
+    const sp = btn.querySelector('.spinner'); if (sp) sp.outerHTML = '<i data-lucide="refresh-cw" style="width:16px;height:16px"></i>';
     lucide.createIcons();
   }
 }
 
-function addHistory(bet){
-  history.unshift(bet);
-  const el=document.getElementById('history-body');
-  el.innerHTML=`<table class="history-table"><thead><tr><th>Selection</th><th>Sport</th><th>Side</th><th>Odds</th><th>Stake</th><th>Return</th><th>Status</th><th>Time</th></tr></thead><tbody>${history.map(b=>`<tr><td style="font-weight:600">${b.selection_name}</td><td style="color:var(--color-text-muted)">${b.sport||'—'}</td><td><span class="side-badge ${b.side==='BACK'?'side-back':'side-lay'}" style="font-size:.65rem">${b.side}</span></td><td class="td-mono" style="color:var(--color-primary)">${(b.price||0).toFixed(2)}</td><td class="td-mono">£${(b.stake||0).toFixed(2)}</td><td class="td-mono">£${((b.stake||0)*(b.price||0)).toFixed(2)}</td><td><span class="status-pill ${b.status==='placed'?'status-placed':b.status==='failed'?'status-failed':'status-pending'}">${b.status}</span></td><td style="color:var(--color-text-muted);font-size:var(--text-xs)">${b.time?b.time.toLocaleTimeString():'—'}</td></tr>`).join('')}</tbody></table>`;
+// ── History ───────────────────────────────────────────────────────────────────
+
+function addHistory(bet) {
+  betHistory.unshift(bet);
+  const el = document.getElementById('history-body');
+  el.innerHTML = `<table class="history-table"><thead><tr><th>Selection</th><th>Side</th><th>Odds</th><th>Stake</th><th>Return</th><th>Status</th><th>Time</th></tr></thead><tbody>${betHistory.map(b => `<tr>
+    <td style="font-weight:600">${b.selection_name}</td>
+    <td><span class="side-badge ${b.side === 'BACK' ? 'side-back' : 'side-lay'}" style="font-size:.65rem">${b.side}</span></td>
+    <td class="td-mono" style="color:var(--color-primary)">${(b.price || 0).toFixed(2)}</td>
+    <td class="td-mono">£${(b.stake || 0).toFixed(2)}</td>
+    <td class="td-mono">£${((b.stake || 0) * (b.price || 0)).toFixed(2)}</td>
+    <td><span class="status-pill ${b.status === 'placed' ? 'status-placed' : b.status === 'failed' ? 'status-failed' : 'status-pending'}">${b.status}</span></td>
+    <td style="color:var(--color-text-muted);font-size:var(--text-xs)">${b.time ? b.time.toLocaleTimeString() : '—'}</td>
+  </tr>`).join('')}</tbody></table>`;
 }
 
-document.getElementById('bet-input').addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key==='Enter')parseBet()});
-document.getElementById('login-password').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin()});
+// ── Feedback ──────────────────────────────────────────────────────────────────
+
+async function sendFeedback(correct, note) {
+  if (!current) return;
+  try {
+    await apiFetch(API + '/api/feedback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        input: document.getElementById('bet-input').value.trim(),
+        output: { selection_name: current.selection_name, side: current.side, stake: current.stake, price: current.price },
+        correct,
+        note: note || ''
+      })
+    });
+  } catch(e) {}
+}
+
+function onThumbsUp() {
+  document.getElementById('fb-up').classList.add('active-up');
+  document.getElementById('fb-down').classList.remove('active-down');
+  const w = document.getElementById('feedback-note-wrap'); if (w) w.remove();
+  sendFeedback(true, '');
+  showFeedbackSent('Thanks for the feedback!');
+}
+
+function onThumbsDown() {
+  document.getElementById('fb-down').classList.add('active-down');
+  document.getElementById('fb-up').classList.remove('active-up');
+  hideFeedbackSent();
+  if (document.getElementById('feedback-note-wrap')) return;
+  const actions = document.getElementById('slip-actions-inner');
+  const wrap = document.createElement('div');
+  wrap.id = 'feedback-note-wrap'; wrap.className = 'feedback-note-wrap';
+  wrap.innerHTML = `<div style="font-size:var(--text-xs);color:var(--color-text-muted);font-weight:500">What went wrong? (optional)</div>
+    <textarea class="feedback-note-input" id="feedback-note" placeholder="e.g. Wrong sport detected, stake was misread…" rows="3"></textarea>
+    <div class="feedback-note-row">
+      <button class="btn-feedback-cancel" onclick="cancelFeedback()">Cancel</button>
+      <button class="btn-feedback-submit" onclick="submitBadFeedback()">Submit</button>
+    </div>`;
+  actions.insertAdjacentElement('afterend', wrap);
+  document.getElementById('feedback-note')?.focus();
+}
+
+function cancelFeedback() {
+  const w = document.getElementById('feedback-note-wrap'); if (w) w.remove();
+  document.getElementById('fb-down').classList.remove('active-down');
+}
+
+function submitBadFeedback() {
+  const note = (document.getElementById('feedback-note') || {}).value || '';
+  const w = document.getElementById('feedback-note-wrap'); if (w) w.remove();
+  sendFeedback(false, note);
+  showFeedbackSent('Feedback logged — thank you!');
+}
+
+function showFeedbackSent(msg) {
+  const bar = document.getElementById('feedback-bar'); if (!bar) return;
+  let sent = document.getElementById('feedback-sent');
+  if (!sent) { sent = document.createElement('div'); sent.id = 'feedback-sent'; sent.className = 'feedback-sent'; bar.insertAdjacentElement('afterend', sent); }
+  sent.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>' + msg;
+}
+
+function hideFeedbackSent() { const s = document.getElementById('feedback-sent'); if (s) s.remove(); }
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+
+document.getElementById('bet-input').addEventListener('keydown', e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') parseBet(); });
+document.getElementById('login-password').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
 lucide.createIcons();
-
-// Submit credentials to the backend, which forwards them to Betfair's auth endpoint.
-// Password is cleared on success so it doesn't linger in the DOM.
-async function doLogin(){
-  const username=document.getElementById('login-username').value.trim();
-  const password=document.getElementById('login-password').value;
-  const btn=document.getElementById('login-btn'),btnTxt=document.getElementById('login-btn-text');
-  const errEl=document.getElementById('login-error');
-  if(!username||!password){errEl.innerHTML='<div class="banner banner-error" style="margin-top:0"><span>Please enter both username and password.</span></div>';return;}
-  btn.disabled=true;btnTxt.textContent='Signing in…';errEl.innerHTML='';
-  try{
-    const res=await fetch(API+'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({username,password})});
-    if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e.detail||'Login failed. Check your credentials.')}
-    document.getElementById('login-overlay').classList.add('login-hidden');
-    document.getElementById('login-password').value='';
-  }catch(e){
-    errEl.innerHTML=`<div class="banner banner-error" style="margin-top:0"><span>${e.message}</span></div>`;
-    btn.disabled=false;btnTxt.textContent='Sign in';
-  }
-}
-
-// Re-shows the login overlay with an optional reason message.
-// Called on page load (implicitly, overlay starts visible) and on session expiry.
-function showLoginPrompt(reason){
-  const overlay=document.getElementById('login-overlay');
-  const subtitle=document.getElementById('login-subtitle');
-  subtitle.textContent=reason||'Enter your Betfair credentials to continue';
-  overlay.classList.remove('login-hidden');
-  document.getElementById('login-username').focus();
-}
-
-// Wrapper around fetch that intercepts 401s from any endpoint and re-prompts login
-// instead of silently failing or showing a generic error.
-async function apiFetch(url,options={}){
-  options.credentials='include';
-  const res=await fetch(url,options);
-  if(res.status===401){
-    showLoginPrompt('Your session has expired — please sign in again.');
-    throw new Error('session_expired');
-  }
-  return res;
-}
 </script>
 </body>
 </html>

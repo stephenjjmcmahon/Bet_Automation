@@ -1,4 +1,7 @@
+import json
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -6,7 +9,7 @@ from pydantic import BaseModel
 
 from backend.schemas.bets import BetRequest, PreparedSlip
 from backend.services.ai_interpreter import AIInterpreter
-from backend.services.search_service import find_event_candidates, resolve_market
+from backend.services.search_service import find_event_candidates, resolve_market, get_upcoming_fixtures
 from backend.services.betslips_service import create_betslip
 from backend.services.betfair_client import place_orders
 from backend.services.odds_service import get_best_price, MarketSuspendedError, InsufficientLiquidityError
@@ -20,6 +23,22 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class FixtureRequest(BaseModel):
+    team_name: str
+    sport: str = "football"
+
+
+class ConfirmRequest(BaseModel):
+    stake: Optional[float] = None
+
+
+class FeedbackRequest(BaseModel):
+    input: str
+    output: dict
+    correct: bool
+    note: Optional[str] = None
+
+
 def _require_session(request: Request):
     get_token(request.session)
 
@@ -29,7 +48,6 @@ router = APIRouter()
 
 @router.get("/api/auth/check")
 def auth_check(request: Request):
-    # Raises SessionExpiredError (→ 401) if no token in session, otherwise 200.
     get_token(request.session)
     return {"status": "ok"}
 
@@ -40,18 +58,41 @@ def betfair_login(request: Request, body: LoginRequest):
         login(body.username, body.password, request.session)
         return {"status": "ok"}
     except ValueError as e:
-        # Betfair returned a non-SUCCESS status (wrong credentials, locked account, etc.)
         raise HTTPException(status_code=401, detail=str(e))
     except Exception as e:
-        # Network failure or unexpected error reaching the Betfair auth endpoint
         raise HTTPException(status_code=502, detail=f"Could not reach Betfair: {str(e)}")
+
+
+@router.post("/api/fixtures")
+def fixtures(request: Request, body: FixtureRequest):
+    try:
+        result = get_upcoming_fixtures(body.team_name, body.sport, request.session, limit=3)
+        return {"fixtures": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/api/prepare", response_model=list[PreparedSlip], dependencies=[Depends(_require_session)])
 def prepare_bet(request: Request, body: BetRequest):
     request_start = datetime.now(timezone.utc)
 
-    parsed_bet = AIInterpreter.interpret(body.user_input)
+    clarification = AIInterpreter.interpret(body.user_input)
+
+    if clarification.status == "clarification_needed":
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "status": "clarification_needed",
+                "clarification_question": clarification.clarification_question,
+                "missing_fields": clarification.missing_fields or [],
+                "parsed_bet": clarification.parsed_bet.model_dump() if clarification.parsed_bet else None,
+            },
+        )
+
+    if clarification.parsed_bet is None:
+        raise HTTPException(status_code=500, detail="AI returned ok status but no parsed bet")
+
+    parsed_bet = clarification.parsed_bet
 
     candidates = find_event_candidates(parsed_bet, request.session)
     event_ids = AIInterpreter.select_top_events(body.user_input, candidates)
@@ -155,15 +196,17 @@ def prepare_bet(request: Request, body: BetRequest):
 
 
 @router.post("/api/confirm/{slip_id}", dependencies=[Depends(_require_session)])
-def confirm_bet(slip_id: str, request: Request):
+def confirm_bet(slip_id: str, request: Request, body: ConfirmRequest = ConfirmRequest()):
     created_at = pending_slips.get_created_at(request.session, slip_id)
     betslip = pending_slips.pop(request.session, slip_id)
 
     if betslip is None:
         if created_at is not None:
-            # Entry existed in the session but the TTL had passed
             logger.log_slip_expired(slip_id)
         raise HTTPException(status_code=404, detail="Slip not found or expired")
+
+    if body.stake is not None:
+        betslip["instructions"][0]["limitOrder"]["size"] = body.stake
 
     now = datetime.now(timezone.utc)
     time_to_confirm_ms = int((now - created_at).total_seconds() * 1000) if created_at else None
@@ -171,3 +214,18 @@ def confirm_bet(slip_id: str, request: Request):
     logger.log_bet_confirmed(slip_id=slip_id, time_to_confirm_ms=time_to_confirm_ms)
 
     return place_orders(betslip["marketId"], betslip["instructions"], request.session)
+
+
+@router.post("/api/feedback")
+def feedback(body: FeedbackRequest):
+    Path("logs").mkdir(exist_ok=True)
+    entry = {
+        "timestamp": datetime.utcnow().isoformat(),
+        "input": body.input,
+        "output": body.output,
+        "correct": body.correct,
+        "note": body.note or "",
+    }
+    with open("logs/feedback.jsonl", "a") as f:
+        f.write(json.dumps(entry) + "\n")
+    return {"status": "ok"}

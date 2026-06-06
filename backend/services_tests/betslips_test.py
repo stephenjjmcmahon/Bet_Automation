@@ -3,7 +3,7 @@ import os
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from services.betslips_service import create_betslip
+from backend.services.betslips_service import create_betslip
 
 def test_betslip():
 

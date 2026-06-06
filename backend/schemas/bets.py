@@ -1,5 +1,6 @@
+from typing import Literal, Optional
+
 from pydantic import BaseModel
-from typing import Optional
 
 
 class BetRequest(BaseModel):
@@ -11,11 +12,18 @@ class ParsedBet(BaseModel):
     sport: str
     side: str
     stake: float
-    price: Optional[float]
+    price: Optional[float] = None
     market_type: str
     opponent: Optional[str] = None
     competition: Optional[str] = None
     match_date: Optional[str] = None
+
+
+class ClarificationResponse(BaseModel):
+    status: Literal["ok", "clarification_needed"]
+    parsed_bet: Optional[ParsedBet] = None
+    clarification_question: Optional[str] = None
+    missing_fields: Optional[list[str]] = None
 
 
 class PreparedSlip(BaseModel):
@@ -24,11 +32,11 @@ class PreparedSlip(BaseModel):
     market_id: str
     selection_id: str
     selection_name: str
-    event_name: Optional[str] = None       # full Betfair event name e.g. "Chelsea v Man City"
-    competition: Optional[str] = None      # from Betfair COMPETITION projection
-    event_start_time: Optional[str] = None # ISO start time from Betfair
+    event_name: Optional[str] = None
+    competition: Optional[str] = None
+    event_start_time: Optional[str] = None
     side: str
-    price: float             # live price fetched from Betfair at time of prepare
-    requested_price: Optional[float]  # price the user stated, None if not specified
+    price: float
+    requested_price: Optional[float] = None
     stake: float
     projected_return: float

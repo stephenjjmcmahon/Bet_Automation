@@ -4,16 +4,6 @@ from backend.config.sport_mapping import SPORT_EVENT_TYPE_MAP
 
 
 def find_event_candidates(parsed_bet, session: dict) -> list:
-    """
-    Search Betfair for events matching the selection name and sport.
-
-    Returns the raw list of event dicts from listEvents — every element has
-    the shape {"event": {"id", "name", "openDate", ...}, "marketCount": int}.
-    Returns an empty list if Betfair finds nothing; does not raise.
-
-    The caller is responsible for passing this list to AIInterpreter.select_event
-    to pick the correct event rather than blindly taking index 0.
-    """
     sport = parsed_bet.sport.lower()
     event_type_id = SPORT_EVENT_TYPE_MAP.get(sport)
 
@@ -24,22 +14,6 @@ def find_event_candidates(parsed_bet, session: dict) -> list:
 
 
 def resolve_market(event_id: str, parsed_bet, session: dict) -> dict:
-    """
-    Given a confirmed event ID, fetch the market and resolve the runner.
-
-    Calls listMarketCatalogue to get markets for the event, then matches
-    the selection name against the runner list to get the selectionId.
-
-    Returns
-    -------
-    dict with keys: eventId, marketId, selectionId (all strings)
-
-    Raises
-    ------
-    ValueError
-        If no markets are found for the event, or the named runner is not
-        present in the market (e.g. name mismatch after AI extraction).
-    """
     markets = list_market_catalogue(event_id, parsed_bet.market_type, session)
 
     if not markets:
@@ -50,8 +24,7 @@ def resolve_market(event_id: str, parsed_bet, session: dict) -> dict:
 
     if selection_id is None:
         raise ValueError(
-            f"Runner '{parsed_bet.selection_name}' not found in market {market['marketId']}. "
-            "The selection name from the AI may not match the Betfair runner name exactly."
+            f"Runner '{parsed_bet.selection_name}' not found in market {market['marketId']}."
         )
 
     return {
@@ -60,3 +33,39 @@ def resolve_market(event_id: str, parsed_bet, session: dict) -> dict:
         "selectionId": selection_id,
         "competition": market.get("competition", {}).get("name"),
     }
+
+
+def get_upcoming_fixtures(team_name: str, sport: str, session: dict, limit: int = 3) -> list:
+    event_type_id = SPORT_EVENT_TYPE_MAP.get(sport.lower())
+    if not event_type_id:
+        return []
+
+    try:
+        events = list_events(team_name, event_type_id, session)
+    except Exception:
+        return []
+
+    fixtures = []
+    for ev in events[:limit]:
+        e = ev.get("event", {})
+        name = e.get("name", "")
+        date = e.get("openDate", None)
+        event_id = e.get("id")
+
+        opponent = None
+        parts = [p.strip() for p in name.replace(" vs ", " v ").split(" v ")]
+        if len(parts) == 2:
+            sel = team_name.lower()
+            for part in parts:
+                if sel not in part.lower():
+                    opponent = part
+                    break
+
+        fixtures.append({
+            "eventId": event_id,
+            "eventName": name,
+            "eventDate": date,
+            "opponent": opponent or name,
+        })
+
+    return fixtures

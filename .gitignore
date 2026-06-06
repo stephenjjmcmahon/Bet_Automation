@@ -1,18 +1,9 @@
-# Python
-backend/venv/
 venv/
 __pycache__/
 *.pyc
-
-# Secrets
+*.pyo
 .env
-.env.*
-backend/.env
-
-# Node (future frontend)
-node_modules/
-
-# OS / editor
+logs/
 .DS_Store
 .vscode/
 .idea/
@@ -20,3 +11,9 @@ node_modules/
 # Logs and database
 logs/
 *.db
+.bash_history
+.CFUserTextEncoding
+.cortex-debug
+.Rapp.history
+*.log
+.cabal/
