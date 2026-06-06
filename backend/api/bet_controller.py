@@ -18,3 +18,5 @@ def place_bet(market_id, selection_id, side, price, stake):
     )
 
     return response
+
+# Don't know why this is under api/

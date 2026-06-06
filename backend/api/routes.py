@@ -58,7 +58,7 @@ async def interpret_bet(request: BetRequest):
         try:
             raw = await loop.run_in_executor(executor, search_market, bet)
             if raw:
-                event_name = raw.get("eventName") or ""
+                event_name = raw.get("eventName") or "" #This and line below can probably go in the market info section
                 opponent = raw.get("opponent")
                 market_info = {
                     "eventName":   event_name,

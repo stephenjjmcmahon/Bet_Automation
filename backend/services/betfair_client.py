@@ -85,7 +85,7 @@ def list_events(team_name: str, event_type_id: str):
     return betfair_post("listEvents/", payload)
 
 
-def list_market_catalogue(event_id: str, market_type: str = "MATCH_ODDS"):
+def list_market_catalogue(event_id: str, market_type: str = "MATCH_ODDS"): # Defautlt to match odds and only uses first market, this is a problem because event id is only based on team name and sport
     payload = {
         "filter": {
             "eventIds": [event_id],

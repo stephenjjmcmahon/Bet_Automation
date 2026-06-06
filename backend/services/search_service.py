@@ -14,7 +14,7 @@ def search_market(parsed_bet):
     if not events:
         raise ValueError(f"No events found for {parsed_bet.selection_name}")
 
-    event = events[0]["event"]
+    event = events[0]["event"] # Takes the first event, which is only based on name and sport
     event_id = event["id"]
     event_name = event.get("name", "")
     event_date = event.get("openDate", None)
@@ -47,7 +47,7 @@ def search_market(parsed_bet):
     }
 
 
-def get_upcoming_fixtures(team_name: str, sport: str = "football", limit: int = 3):
+def get_upcoming_fixtures(team_name: str, sport: str = "football", limit: int = 3): # Football hardcoded
     """Return next N upcoming fixtures for a team — used for game picker UI."""
     event_type_id = SPORT_EVENT_TYPE_MAP.get(sport.lower())
     if not event_type_id:
