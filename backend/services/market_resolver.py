@@ -1,9 +1,7 @@
-def resolve_selection(runners: list, selection_name: str) -> int:
+﻿def resolve_selection(runners: list, selection_name: str) -> tuple[int, str] | tuple[None, None]:
     name_lower = selection_name.lower()
     for runner in runners:
-        runner_name = runner.get("runnerName", "").lower()
-        if name_lower in runner_name or runner_name in name_lower:
-            return runner["selectionId"]
-    if runners:
-        return runners[0]["selectionId"]
-    raise ValueError(f"Could not resolve selection: {selection_name}")
+        runner_name = runner.get("runnerName", "")
+        if name_lower in runner_name.lower() or runner_name.lower() in name_lower:
+            return runner["selectionId"], runner_name
+    return None, None

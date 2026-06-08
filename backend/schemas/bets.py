@@ -9,11 +9,13 @@ class BetRequest(BaseModel):
 
 class ParsedBet(BaseModel):
     selection_name: str
+    event_name: Optional[str] = None
     sport: str
     side: str
     stake: float
     price: Optional[float] = None
     market_type: str
+    line: Optional[float] = None
     opponent: Optional[str] = None
     competition: Optional[str] = None
     match_date: Optional[str] = None
@@ -32,9 +34,11 @@ class PreparedSlip(BaseModel):
     market_id: str
     selection_id: int
     selection_name: str
+    runner_name: Optional[str] = None
     event_name: Optional[str] = None
     competition: Optional[str] = None
     event_start_time: Optional[str] = None
+    market_type: Optional[str] = None
     side: str
     price: float
     requested_price: Optional[float] = None

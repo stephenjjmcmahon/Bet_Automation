@@ -6,29 +6,6 @@ COMPETITION_SPORTS = {
     "greyhound racing", "cycling", "politics", "special bets",
 }
 
-# Some sports use different market type codes than the AI's generic names.
-# Applied in resolve_market before calling Betfair.
-MARKET_TYPE_OVERRIDES = {
-    "golf": {
-        "OUTRIGHT_WINNER": "WINNER",
-        "MATCH_ODDS":      "WINNER",
-    },
-    "horse racing": {
-        "MATCH_ODDS":      "WIN",
-        "OUTRIGHT_WINNER": "WIN",
-    },
-    "motor sport": {
-        "MATCH_ODDS": "OUTRIGHT_WINNER",
-    },
-    "motorsport": {
-        "MATCH_ODDS": "OUTRIGHT_WINNER",
-    },
-    "cycling": {
-        "MATCH_ODDS":      "OUTRIGHT_WINNER",
-        "OUTRIGHT_WINNER": "OUTRIGHT_WINNER",
-    },
-}
-
 SPORT_EVENT_TYPE_MAP = {
     "soccer": "1",          # Teamname v Teamname
     "football": "1",

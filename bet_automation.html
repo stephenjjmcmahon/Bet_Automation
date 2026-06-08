@@ -542,7 +542,7 @@ function renderSlip(p) {
   <div class="betslip-card">
     <div class="slip-header">
       <div class="slip-header-left">
-        <span class="slip-sport-badge"><i data-lucide="activity" style="width:11px;height:11px"></i>Match Odds</span>
+        <span class="slip-sport-badge"><i data-lucide="activity" style="width:11px;height:11px"></i>${p.market_type || 'Match ODDS'}</span>
         <div class="slip-market">${p.competition || '—'}</div>
       </div>
       <div class="slip-header-right">
@@ -553,7 +553,7 @@ function renderSlip(p) {
     </div>
     <div class="slip-body">
       <div class="slip-selection">${p.event_name || p.selection_name}</div>
-      <div style="font-size:var(--text-sm);color:var(--color-text-muted);margin-top:var(--space-1)">Betting on: <strong>${p.selection_name}</strong></div>
+      <div style="font-size:var(--text-sm);color:var(--color-text-muted);margin-top:var(--space-1)">Betting on: <strong>${p.runner_name || p.selection_name}</strong></div>
       <div class="slip-row">
         <div class="slip-field"><span class="slip-field-label">Bet Type</span><span class="slip-field-value">${p.side === 'BACK' ? 'Back' : 'Lay'}</span></div>
         <div class="slip-field"><span class="slip-field-label">Start Time</span><span class="slip-field-value" style="font-size:var(--text-sm)">${startTime}</span></div>

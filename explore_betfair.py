@@ -15,7 +15,7 @@ from backend.config.sport_mapping import SPORT_EVENT_TYPE_MAP
 load_dotenv()
 
 # ── Config ────────────────────────────────────────────────────────────────────
-SPORT = "greyhound racing"   # change to any key in SPORT_EVENT_TYPE_MAP
+SPORT = "basketball"   # change to any key in SPORT_EVENT_TYPE_MAP
 # ─────────────────────────────────────────────────────────────────────────────
 
 username = os.getenv("BETFAIR_USERNAME") or input("Betfair username: ")
@@ -34,6 +34,12 @@ now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 all_events = betfair_post("listEvents/", {"filter": {"marketStartTime": {"from": now}}}, session)
 print(f"Upcoming events on Betfair: {len(all_events)}")
 
+all_market_types = betfair_post("listMarketTypes/", {"filter": {}}, session)
+print(f"=== All market types on exchange ({len(all_market_types)} total) ===")
+for mt in sorted(all_market_types, key=lambda x: x.get("marketCount", 0), reverse=True):
+    print(f"  {mt['marketType']:<40}  {mt.get('marketCount', '?')} markets")
+print()
+
 event_type_id = SPORT_EVENT_TYPE_MAP.get(SPORT)
 if not event_type_id:
     print(f"Unknown sport '{SPORT}'. Available: {list(SPORT_EVENT_TYPE_MAP.keys())}")
@@ -44,20 +50,20 @@ filter_ = {"eventTypeIds": [event_type_id]}
 # Market types
 market_types = betfair_post("listMarketTypes/", {"filter": filter_}, session)
 print(f"=== Market types for {SPORT} ({len(market_types)} found) ===")
-#for mt in sorted(market_types, key=lambda x: x.get("marketCount", 0), reverse=True):
- #   print(f"  {mt['marketType']:<35}  {mt.get('marketCount', '?')} markets")
+for mt in sorted(market_types, key=lambda x: x.get("marketCount", 0), reverse=True):
+    print(f"  {mt['marketType']:<35}  {mt.get('marketCount', '?')} markets")
 
-#print()
+print()
 
 # Competitions
 competitions = betfair_post("listCompetitions/", {"filter": filter_}, session)
 print(f"=== Competitions for {SPORT} ({len(competitions)} found) ===")
-for c in sorted(competitions, key=lambda x: x.get("marketCount", 0), reverse=True):
-    name = c.get("competition", {}).get("name", "?")
-    region = c.get("competitionRegion", "")
-    print(f"  {name:<40}  {region:<20}  {c.get('marketCount', '?')} markets")
+#for c in sorted(competitions, key=lambda x: x.get("marketCount", 0), reverse=True):
+ #   name = c.get("competition", {}).get("name", "?")
+  #  region = c.get("competitionRegion", "")
+   # print(f"  {name:<40}  {region:<20}  {c.get('marketCount', '?')} markets")
 
-print()
+#print()
 
 # Events (first 20)
 events = betfair_post("listEvents/", {"filter": filter_}, session)

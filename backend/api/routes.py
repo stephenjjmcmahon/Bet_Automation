@@ -1,4 +1,4 @@
-import json
+﻿import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from backend.schemas.bets import BetRequest, PreparedSlip
 from backend.services.ai_interpreter import AIInterpreter
-from backend.services.search_service import find_event_candidates, find_all_events_for_sport, resolve_market, get_upcoming_fixtures
+from backend.services.search_service import find_event_candidates, find_all_events_for_sport, resolve_market, get_upcoming_fixtures, get_market_types
 from backend.config.sport_mapping import COMPETITION_SPORTS
 from backend.services.betslips_service import create_betslip
 from backend.services.betfair_client import place_orders
@@ -94,6 +94,8 @@ def prepare_bet(request: Request, body: BetRequest):
         raise HTTPException(status_code=500, detail="AI returned ok status but no parsed bet")
 
     parsed_bet = clarification.parsed_bet
+    print(f"DEBUG parsed_bet: {parsed_bet.model_dump()}")
+    print()
 
     if parsed_bet.sport.lower() in COMPETITION_SPORTS:
         candidates = find_all_events_for_sport(parsed_bet.sport, request.session)
@@ -101,12 +103,20 @@ def prepare_bet(request: Request, body: BetRequest):
         candidates = find_event_candidates(parsed_bet, request.session)
 
     print(f"DEBUG candidates count: {len(candidates)}")
+    print()
+
     print(f"DEBUG first 3 candidates: {[c['event']['name'] for c in candidates[:3]]}")
+    print()
 
-    event_ids = AIInterpreter.select_top_events(body.user_input, candidates)
-    print(f"DEBUG event_ids selected: {event_ids}")
+    market_types = get_market_types(parsed_bet.sport, candidates, request.session)
+    print(f"DEBUG market_types: {market_types}")
+    print()
 
-    if not event_ids:
+    selections = AIInterpreter.select_top_events(body.user_input, candidates, market_types)
+    print(f"DEBUG selections: {selections}")
+    print()
+
+    if not selections:
         logger.log_failure(
             reason="no_matching_event",
             selection_name=parsed_bet.selection_name,
@@ -118,15 +128,18 @@ def prepare_bet(request: Request, body: BetRequest):
         )
 
     slips = []
-    for event_id in event_ids:
+    for sel in selections:
+        event_id = sel["event_id"]
+        chosen_market_type = sel["market_type"]
         selected = next((c for c in candidates if c["event"]["id"] == event_id), None)
         event_name = selected["event"].get("name") if selected else None
         event_start_time = selected["event"].get("openDate") if selected else None
 
         try:
-            market_ids = resolve_market(event_id, parsed_bet, request.session)
+            market_ids = resolve_market(event_id, parsed_bet, request.session, market_type=chosen_market_type)
         except ValueError as e:
             print(f"DEBUG resolve_market failed for {event_id}: {e}")
+            print()
             continue
 
         try:
@@ -136,8 +149,11 @@ def prepare_bet(request: Request, body: BetRequest):
                 parsed_bet.side,
                 parsed_bet.stake,
                 request.session,
+                line=parsed_bet.line,
             )
-        except (MarketSuspendedError, InsufficientLiquidityError):
+        except (MarketSuspendedError, InsufficientLiquidityError, ValueError) as e:
+            print(f"DEBUG get_best_price failed for {event_id}/{chosen_market_type}: {type(e).__name__}: {e}")
+            print()
             continue
 
         betslip = create_betslip(
@@ -175,21 +191,30 @@ def prepare_bet(request: Request, body: BetRequest):
             time_to_event_seconds=time_to_event_seconds,
         )
 
-        slips.append(PreparedSlip(
+        slip = PreparedSlip(
             slip_id=slip_id,
             event_id=market_ids["eventId"],
             market_id=market_ids["marketId"],
             selection_id=market_ids["selectionId"],
             selection_name=parsed_bet.selection_name,
+            runner_name=market_ids.get("runnerName"),
             event_name=event_name,
             competition=market_ids.get("competition"),
             event_start_time=event_start_time,
+            market_type=chosen_market_type,
             side=parsed_bet.side,
             price=live_price,
             requested_price=parsed_bet.price,
             stake=parsed_bet.stake,
             projected_return=round(parsed_bet.stake * live_price, 2),
-        ))
+        )
+        slips.append(slip)
+
+    print(f"DEBUG prepared slips ({len(slips)}):")
+    for i, s in enumerate(slips, 1):
+        handicap_str = f"  handicap={parsed_bet.line}" if parsed_bet.line is not None else ""
+        print(f"  {i}.  event={s.event_name}  |  market={s.market_type}  |  runner={s.selection_name}{handicap_str}  |  {s.side} @ {s.price}")
+    print()
 
     if not slips:
         logger.log_failure(
@@ -208,8 +233,13 @@ def prepare_bet(request: Request, body: BetRequest):
 @router.post("/api/confirm/{slip_id}", dependencies=[Depends(_require_session)])
 def confirm_bet(slip_id: str, request: Request, body: ConfirmRequest = ConfirmRequest()):
     print(f"DEBUG confirm session keys: {list(request.session.keys())}")
+    print()
+
     print(f"DEBUG pending_slips in session: {list(request.session.get('pending_slips', {}).keys())}")
+    print()
+
     print(f"DEBUG looking for slip_id: {slip_id}")
+    print()
     created_at = pending_slips.get_created_at(request.session, slip_id)
     betslip = pending_slips.pop(request.session, slip_id)
 
@@ -233,7 +263,7 @@ def confirm_bet(slip_id: str, request: Request, body: ConfirmRequest = ConfirmRe
 def feedback(body: FeedbackRequest):
     Path("logs").mkdir(exist_ok=True)
     entry = {
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "input": body.input,
         "output": body.output,
         "correct": body.correct,

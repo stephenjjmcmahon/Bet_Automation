@@ -1,7 +1,7 @@
 import json
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal, Optional
 
@@ -26,11 +26,13 @@ _log.setLevel(logging.INFO)
 class BetOutput(BaseModel):
     status: Literal["ok", "clarification_needed"]
     selection_name: Optional[str] = None
+    event_name: Optional[str] = None
     sport: Optional[str] = None
     side: Optional[Literal["BACK", "LAY"]] = None
     stake: Optional[float] = None
     price: Optional[float] = None
     market_type: Optional[str] = None
+    line: Optional[float] = None
     opponent: Optional[str] = None
     competition: Optional[str] = None
     match_date: Optional[str] = None
@@ -77,8 +79,9 @@ Default → Football
 ━━ MARKET TYPE INFERENCE ━━
 "to win" / no market specified / match odds → MATCH_ODDS
 "btts" / "both teams to score" → BOTH_TEAMS_TO_SCORE
-"over 2.5" / "under 2.5" → OVER_UNDER_25 | selection = "Over 2.5" or "Under 2.5"
-"over 3.5" / "under 3.5" → OVER_UNDER_35 | selection = "Over 3.5" or "Under 3.5"
+"over 2.5" / "under 2.5" (football) → OVER_UNDER_25 | selection = "Over 2.5" or "Under 2.5"
+"over 3.5" / "under 3.5" (football) → OVER_UNDER_35 | selection = "Over 3.5" or "Under 3.5"
+"over/under" + large number (basketball/other) → COMBINED_TOTAL | selection = "Over" or "Under" | line = the number
 "correct score" → CORRECT_SCORE
 "first goal scorer" / "first scorer" / "to score first" → FIRST_GOAL_SCORER
 "asian handicap" → ASIAN_HANDICAP
@@ -96,28 +99,47 @@ Default → Football
 "top batsman" → TOP_BATSMAN | "top bowler" → TOP_BOWLER
 "map winner" (esports) → MAP_WINNER
 
+━━ LINE EXTRACTION ━━
+line: the numeric handicap or total line when the market has multiple lines to choose from, else null.
+- "over 216.5 points" → line=216.5, selection_name="Over", market_type=COMBINED_TOTAL
+- "under 218.5" (basketball) → line=218.5, selection_name="Under", market_type=COMBINED_TOTAL
+- "asian handicap -1.5 Man City" → line=-1.5, selection_name="Man City", market_type=ASIAN_HANDICAP
+- "over 2.5 goals" (football) → line=null (line is encoded in the market type OVER_UNDER_25, not a runner handicap)
+- "btts" / match odds / outrights → line=null
+
 ━━ ADDITIONAL EXTRACTION ━━
 - opponent: the opposing team or player if mentioned (e.g. "vs Arsenal" → "Arsenal"), else null
 - competition: the league or tournament if mentioned (e.g. "Premier League", "US Open"), else null
 - match_date: any date or time reference if mentioned (e.g. "Saturday", "tonight", "3pm"), else null
 
+━━ EVENT NAME vs SELECTION NAME ━━
+event_name is the team/event to SEARCH FOR on Betfair. selection_name is what you BET ON within that event.
+- Simple team bet ("Man City to win"): event_name = "Man City" (same as selection_name)
+- Player prop with team context ("Haaland to score in Man City game"): selection_name = "Haaland", event_name = "Man City"
+- Over/under with team context ("Over 2.5 goals in Man City game"): selection_name = "Over 2.5", event_name = "Man City"
+- Over/under with two teams ("Over 2.5 goals Man City vs Arsenal"): selection_name = "Over 2.5", event_name = "Man City"
+- Horse/golf/racing bets: event_name = the race or tournament name if mentioned, else null
+- No event context given: event_name = null (will fall back to searching by selection_name)
+
 ━━ EXAMPLES (follow these exactly) ━━
-"back Man City to win 20" → {"status":"ok","selection_name":"Man City","sport":"Football","side":"BACK","stake":20,"price":null,"market_type":"MATCH_ODDS","opponent":null,"competition":null,"match_date":null}
-"lay Liverpool a tenner" → {"status":"ok","selection_name":"Liverpool","sport":"Football","side":"LAY","stake":10,"price":null,"market_type":"MATCH_ODDS","opponent":null,"competition":null,"match_date":null}
-"Man City vs Arsenal 20" → {"status":"ok","selection_name":"Man City","sport":"Football","side":"BACK","stake":20,"price":null,"market_type":"MATCH_ODDS","opponent":"Arsenal","competition":null,"match_date":null}
-"back Man City in the Premier League 20" → {"status":"ok","selection_name":"Man City","sport":"Football","side":"BACK","stake":20,"price":null,"market_type":"MATCH_ODDS","opponent":null,"competition":"Premier League","match_date":null}
-"back Man City tonight 20" → {"status":"ok","selection_name":"Man City","sport":"Football","side":"BACK","stake":20,"price":null,"market_type":"MATCH_ODDS","opponent":null,"competition":null,"match_date":"tonight"}
+"back Man City to win 20" → {"status":"ok","selection_name":"Man City","event_name":"Man City","sport":"Football","side":"BACK","stake":20,"price":null,"market_type":"MATCH_ODDS","opponent":null,"competition":null,"match_date":null}
+"lay Liverpool a tenner" → {"status":"ok","selection_name":"Liverpool","event_name":"Liverpool","sport":"Football","side":"LAY","stake":10,"price":null,"market_type":"MATCH_ODDS","opponent":null,"competition":null,"match_date":null}
+"Man City vs Arsenal 20" → {"status":"ok","selection_name":"Man City","event_name":"Man City","sport":"Football","side":"BACK","stake":20,"price":null,"market_type":"MATCH_ODDS","opponent":"Arsenal","competition":null,"match_date":null}
+"back Man City in the Premier League 20" → {"status":"ok","selection_name":"Man City","event_name":"Man City","sport":"Football","side":"BACK","stake":20,"price":null,"market_type":"MATCH_ODDS","opponent":null,"competition":"Premier League","match_date":null}
+"back Man City tonight 20" → {"status":"ok","selection_name":"Man City","event_name":"Man City","sport":"Football","side":"BACK","stake":20,"price":null,"market_type":"MATCH_ODDS","opponent":null,"competition":null,"match_date":"tonight"}
+"over 2.5 goals in the Man City game 20" → {"status":"ok","selection_name":"Over 2.5","event_name":"Man City","sport":"Football","side":"BACK","stake":20,"price":null,"market_type":"OVER_UNDER_25","opponent":null,"competition":null,"match_date":null}
+"over 2.5 goals Man City vs Arsenal 20" → {"status":"ok","selection_name":"Over 2.5","event_name":"Man City","sport":"Football","side":"BACK","stake":20,"price":null,"market_type":"OVER_UNDER_25","opponent":"Arsenal","competition":null,"match_date":null}
+"first goal scorer Haaland in Man City vs Arsenal 10" → {"status":"ok","selection_name":"Haaland","event_name":"Man City","sport":"Football","side":"BACK","stake":10,"price":null,"market_type":"FIRST_GOAL_SCORER","opponent":"Arsenal","competition":null,"match_date":null}
+"first goal scorer Haaland 10" → {"status":"ok","selection_name":"Haaland","event_name":null,"sport":"Football","side":"BACK","stake":10,"price":null,"market_type":"FIRST_GOAL_SCORER","opponent":null,"competition":null,"match_date":null}
 "back arsenal" → {"status":"clarification_needed","clarification_question":"How much would you like to stake on Arsenal?","missing_fields":["stake"]}
 "back Bayern Munich" → {"status":"clarification_needed","clarification_question":"How much would you like to stake on Bayern Munich?","missing_fields":["stake"]}
 "20 quid on football" → {"status":"clarification_needed","clarification_question":"What would you like to bet on?","missing_fields":["selection_name"]}
 "a tenner" → {"status":"clarification_needed","clarification_question":"What would you like to bet on?","missing_fields":["selection_name"]}
-"back Djokovic at Wimbledon 50" → {"status":"ok","selection_name":"Djokovic","sport":"Tennis","side":"BACK","stake":50,"price":null,"market_type":"MATCH_ODDS","opponent":null,"competition":"Wimbledon","match_date":null}
-"back Verstappen to win the championship 100" → {"status":"ok","selection_name":"Verstappen","sport":"Motorsport","side":"BACK","stake":100,"price":null,"market_type":"OUTRIGHT_WINNER","opponent":null,"competition":null,"match_date":null}
-"back Desert Crown each way 25" → {"status":"ok","selection_name":"Desert Crown","sport":"Horse Racing","side":"BACK","stake":25,"price":null,"market_type":"EACH_WAY","opponent":null,"competition":null,"match_date":null}
-"back Rory McIlroy top 5 at the Masters 40" → {"status":"ok","selection_name":"Rory McIlroy","sport":"Golf","side":"BACK","stake":40,"price":null,"market_type":"TOP_5_FINISH","opponent":null,"competition":"Masters","match_date":null}
-"over 2.5 goals Man City vs Arsenal 20" → {"status":"ok","selection_name":"Over 2.5","sport":"Football","side":"BACK","stake":20,"price":null,"market_type":"OVER_UNDER_25","opponent":null,"competition":null,"match_date":null}
-"back Real Madrid at 2.5 for 50" → {"status":"ok","selection_name":"Real Madrid","sport":"Football","side":"BACK","stake":50,"price":2.5,"market_type":"MATCH_ODDS","opponent":null,"competition":null,"match_date":null}
-"first goal scorer Haaland 10" → {"status":"ok","selection_name":"Haaland","sport":"Football","side":"BACK","stake":10,"price":null,"market_type":"FIRST_GOAL_SCORER","opponent":null,"competition":null,"match_date":null}
+"back Djokovic at Wimbledon 50" → {"status":"ok","selection_name":"Djokovic","event_name":"Djokovic","sport":"Tennis","side":"BACK","stake":50,"price":null,"market_type":"MATCH_ODDS","opponent":null,"competition":"Wimbledon","match_date":null}
+"back Verstappen to win the championship 100" → {"status":"ok","selection_name":"Verstappen","event_name":"Verstappen","sport":"Motorsport","side":"BACK","stake":100,"price":null,"market_type":"OUTRIGHT_WINNER","opponent":null,"competition":null,"match_date":null}
+"back Desert Crown each way 25" → {"status":"ok","selection_name":"Desert Crown","event_name":null,"sport":"Horse Racing","side":"BACK","stake":25,"price":null,"market_type":"EACH_WAY","opponent":null,"competition":null,"match_date":null}
+"back Rory McIlroy top 5 at the Masters 40" → {"status":"ok","selection_name":"Rory McIlroy","event_name":"Masters","sport":"Golf","side":"BACK","stake":40,"price":null,"market_type":"TOP_5_FINISH","opponent":null,"competition":"Masters","match_date":null}
+"back Real Madrid at 2.5 for 50" → {"status":"ok","selection_name":"Real Madrid","event_name":"Real Madrid","sport":"Football","side":"BACK","stake":50,"price":2.5,"market_type":"MATCH_ODDS","opponent":null,"competition":null,"match_date":null}
 """
 
 
@@ -139,7 +161,7 @@ class AIInterpreter:
             result: BetOutput = response.choices[0].message.parsed
 
             _log.info(json.dumps({
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "input": user_input,
                 "output": result.model_dump(),
             }))
@@ -156,11 +178,13 @@ class AIInterpreter:
 
             bet = ParsedBet(
                 selection_name=result.selection_name,
+                event_name=result.event_name,
                 sport=result.sport or "Football",
                 side=result.side or "BACK",
                 stake=result.stake,
                 price=result.price,
                 market_type=result.market_type or "MATCH_ODDS",
+                line=result.line,
                 opponent=result.opponent,
                 competition=result.competition,
                 match_date=result.match_date,
@@ -169,18 +193,35 @@ class AIInterpreter:
 
         except Exception as e:
             _log.info(json.dumps({
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "input": user_input,
                 "error": str(e),
             }))
             raise
 
     @staticmethod
-    def select_top_events(user_input: str, candidates: list, n: int = 3) -> list[str]:
+    def select_top_events(
+        user_input: str,
+        candidates: list,
+        market_types: list[str],
+        n: int = 3,
+    ) -> list[dict]:
+        """Returns up to n dicts of {event_id, market_type} ranked best to worst."""
         if not candidates:
             return []
 
-        candidates_text = json.dumps(candidates, indent=2)
+        candidates_text = json.dumps(
+            [
+                {
+                    "id": c["event"]["id"],
+                    "name": c["event"]["name"],
+                    "date": c["event"].get("openDate", ""),
+                }
+                for c in candidates
+            ],
+            indent=2,
+        )
+        market_types_text = json.dumps(market_types)
 
         response = _client.chat.completions.create(
             model="gpt-4o-mini",
@@ -189,21 +230,27 @@ class AIInterpreter:
                 {
                     "role": "system",
                     "content": (
-                        "You select the best matching Betfair events from a list "
-                        "based on a user's betting request. "
+                        "You select the best matching Betfair event and market type "
+                        "for a user's betting request. "
                         "Return ONLY valid JSON. No explanation."
                     ),
                 },
                 {
                     "role": "user",
-                    "content": f"""The user wants to bet on: "{user_input}"
+                    "content": f"""The user wants to bet: "{user_input}"
 
 Available Betfair events:
 {candidates_text}
 
-Return JSON: {{"event_ids": ["<id1>", "<id2>", "<id3>"]}} with up to {n} event IDs
-ranked from best to worst match. Include only events that could plausibly match the request.
-Return fewer IDs if fewer events match. If none match, return {{"event_ids": []}}.
+Available market types:
+{market_types_text}
+
+Return JSON: {{"selections": [{{"event_id": "<id>", "market_type": "<type>"}}]}}
+with up to {n} selections ranked from best to worst match.
+- event_id must be from the available events list
+- market_type must be from the available market types list
+- Include only events that could plausibly match the request
+- If none match, return {{"selections": []}}
 """,
                 },
             ],
@@ -214,4 +261,7 @@ Return fewer IDs if fewer events match. If none match, return {{"event_ids": []}
             return []
 
         result = json.loads(content.strip())
-        return [eid for eid in result.get("event_ids", []) if eid is not None]
+        return [
+            s for s in result.get("selections", [])
+            if s.get("event_id") and s.get("market_type")
+        ]

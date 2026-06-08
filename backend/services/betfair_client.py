@@ -27,6 +27,26 @@ def betfair_post(path: str, payload: dict, session: dict):
     return r.json()
 
 
+def list_market_types_for_events(event_ids: list[str], session: dict) -> list[str]:
+    """Market types available across a batch of specific events (one API call)."""
+    result = betfair_post(
+        "listMarketTypes/",
+        {"filter": {"eventIds": event_ids}},
+        session,
+    )
+    return [entry["marketType"] for entry in result]
+
+
+def list_market_types_for_sport(event_type_id: str, session: dict) -> list[str]:
+    """All market types for a sport."""
+    result = betfair_post(
+        "listMarketTypes/",
+        {"filter": {"eventTypeIds": [event_type_id]}},
+        session,
+    )
+    return [entry["marketType"] for entry in result]
+
+
 def list_events(team_name: str, event_type_id: str, session: dict):
     payload = {
         "filter": {
@@ -46,7 +66,7 @@ def list_market_catalogue(event_id: str, market_type: str, session: dict):
         "maxResults": "5",
         "marketProjection": ["RUNNER_DESCRIPTION", "EVENT", "COMPETITION"],
     }
-    return betfair_post("listMarketCatalogue/", payload, session)
+    return betfair_post("listMarketCatalogue/", payload, session) # Get the runners list here
 
 
 def place_orders(market_id: str, instructions: list, session: dict):
