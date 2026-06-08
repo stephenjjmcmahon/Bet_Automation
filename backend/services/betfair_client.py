@@ -1,59 +1,98 @@
 import os
 import requests
 from dotenv import load_dotenv
+from backend.services.betfair_auth import get_token, clear_token, SessionExpiredError
+
 load_dotenv()
 
 BETFAIR_ENDPOINT = "https://api.betfair.com/exchange/betting/rest/v1.0/"
 
-def betfair_post(path: str, payload: dict):
 
+def betfair_post(path: str, payload: dict, session: dict):
     headers = {
         "X-Application": os.getenv("BETFAIR_APP_KEY"),
-        "X-Authentication": os.getenv("BETFAIR_SESSION_TOKEN"),
+        "X-Authentication": get_token(session),
         "Content-Type": "application/json",
     }
 
-    url = BETFAIR_ENDPOINT + path
+    r = requests.post(BETFAIR_ENDPOINT + path, json=payload, headers=headers)
 
-    r = requests.post(url, json=payload, headers=headers)
+    if r.status_code == 401 or "INVALID_SESSION_INFORMATION" in r.text:
+        clear_token(session)
+        raise SessionExpiredError("Betfair session expired — please log in again")
 
-    print("STATUS:", r.status_code)
-   # print("RESPONSE:", r.text)
-
-    r.raise_for_status()
+    if not r.ok:
+        raise ValueError(f"Betfair {r.status_code} error on {path}: {r.text}")
 
     return r.json()
 
-def list_events(team_name: str, event_type_id: str):
 
+def list_market_types_for_events(event_ids: list[str], session: dict) -> list[str]:
+    """Market types available across a batch of specific events (one API call)."""
+    result = betfair_post(
+        "listMarketTypes/",
+        {"filter": {"eventIds": event_ids}},
+        session,
+    )
+    return [entry["marketType"] for entry in result]
+
+
+def list_market_types_for_sport(event_type_id: str, session: dict) -> list[str]:
+    """All market types for a sport."""
+    result = betfair_post(
+        "listMarketTypes/",
+        {"filter": {"eventTypeIds": [event_type_id]}},
+        session,
+    )
+    return [entry["marketType"] for entry in result]
+
+
+def list_events(team_name: str, event_type_id: str, session: dict):
     payload = {
         "filter": {
-            "eventTypeIds": [event_type_id],  # 1 = Soccer
-            "textQuery": team_name
+            "eventTypeIds": [event_type_id],
+            "textQuery": team_name,
         }
     }
+    return betfair_post("listEvents/", payload, session)
 
-    return betfair_post("listEvents/", payload)
 
-def list_market_catalogue(event_id: str, market_type: str = "MATCH_ODDS"):
-
+def list_market_catalogue(event_id: str, market_type: str, session: dict):
     payload = {
         "filter": {
             "eventIds": [event_id],
-            "marketTypeCodes": [market_type]            ### Only works with footbal TODO Change ai to work with other sports market definitions
+            "marketTypeCodes": [market_type],
         },
         "maxResults": "5",
-        "marketProjection": ["RUNNER_DESCRIPTION", "EVENT"]
-
+        "marketProjection": ["RUNNER_DESCRIPTION", "EVENT", "COMPETITION"],
     }
-    #print("Markets returned:", payload)
-    return betfair_post("listMarketCatalogue/", payload)
+    return betfair_post("listMarketCatalogue/", payload, session) # Get the runners list here
 
-def place_orders(market_id: str, instructions: list):
 
+def place_orders(market_id: str, instructions: list, session: dict):
     payload = {
         "marketId": market_id,
-        "instructions": instructions
+        "instructions": instructions,
+    }
+    return betfair_post("placeOrders/", payload, session)
+
+
+def get_market_book(market_id: str, session: dict) -> dict:
+    payload = {
+        "marketIds": [market_id],
+        "priceProjection": {
+            "priceData": ["EX_BEST_OFFERS"],
+            "exBestOffersOverrides": {
+                "bestPricesDepth": 3,
+                "rollupModel": "STAKE",
+                "maximumRollup": 10,
+            },
+        },
     }
 
-    return betfair_post("placeOrders/", payload)
+    result = betfair_post("listMarketBook/", payload, session)
+
+    if not result:
+        raise ValueError(f"No market book returned for market {market_id}")
+
+    return result[0]
