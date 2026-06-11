@@ -39,7 +39,7 @@ def get_best_price(market_id: str, selection_id: str, side: str, stake: float, s
 
     if line is not None:
         matching_runners = [r for r in book["runners"] if str(r["selectionId"]) == str(selection_id)]
-        print(f"  DEBUG get_best_price — selectionId={selection_id} line={line}")
+        print(f"  DEBUG get_best_price - selectionId={selection_id} line={line}")
         print(f"  DEBUG book runners for that selectionId (all {len(matching_runners)}): {[(r.get('handicap'), r.get('status')) for r in matching_runners]}")
         print()
         runner = next(

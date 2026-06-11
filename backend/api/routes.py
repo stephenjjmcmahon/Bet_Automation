@@ -142,14 +142,21 @@ def prepare_bet(request: Request, body: BetRequest):
             print()
             continue
 
+        if chosen_market_type.endswith("_LINE"):
+            effective_side = "BACK" if parsed_bet.selection_name.lower() == "under" else "LAY"
+            effective_line = None
+        else:
+            effective_side = parsed_bet.side
+            effective_line = parsed_bet.line
+
         try:
             live_price = get_best_price(
                 market_ids["marketId"],
                 market_ids["selectionId"],
-                parsed_bet.side,
+                effective_side,
                 parsed_bet.stake,
                 request.session,
-                line=parsed_bet.line,
+                line=effective_line,
             )
         except (MarketSuspendedError, InsufficientLiquidityError, ValueError) as e:
             print(f"DEBUG get_best_price failed for {event_id}/{chosen_market_type}: {type(e).__name__}: {e}")
@@ -159,7 +166,7 @@ def prepare_bet(request: Request, body: BetRequest):
         betslip = create_betslip(
             market_ids["marketId"],
             market_ids["selectionId"],
-            parsed_bet.side,
+            effective_side,
             live_price,
             parsed_bet.stake,
         )
@@ -182,7 +189,7 @@ def prepare_bet(request: Request, body: BetRequest):
             slip_id=slip_id,
             time_to_slip_ms=time_to_slip_ms,
             selection_name=parsed_bet.selection_name,
-            side=parsed_bet.side,
+            side=effective_side,
             stake=parsed_bet.stake,
             price=live_price,
             market_id=market_ids["marketId"],
@@ -202,7 +209,7 @@ def prepare_bet(request: Request, body: BetRequest):
             competition=market_ids.get("competition"),
             event_start_time=event_start_time,
             market_type=chosen_market_type,
-            side=parsed_bet.side,
+            side=effective_side,
             price=live_price,
             requested_price=parsed_bet.price,
             stake=parsed_bet.stake,

@@ -72,9 +72,12 @@ Golfer names + "open/masters/pga/ryder" → Golf
 Fighter names + "bout/fight/ufc/wbc/wba/round" → Boxing or MMA
 Cricket team/player names + "test/odi/t20/innings" → Cricket
 Basketball teams + "nba/quarter" → Basketball
+AFL team names (Geelong, Collingwood, Carlton, Richmond, Essendon, Hawthorn, Sydney Swans, West Coast, Adelaide, Port Adelaide, Brisbane Lions, Fremantle, Gold Coast, GWS, North Melbourne, St Kilda, Western Bulldogs, Melbourne) or "afl/brownlow" → Australian Rules. NOTE: for these teams, "premiership"/"grand final" means the AFL title — Australian Rules, NOT football/rugby.
 Rugby team names + "try/six nations/premiership" → Rugby
 Political figures + "election/vote/seat/party" → Politics
-Default → Football
+NFL teams + "nfl/super bowl/quarter" → American Football
+NHL teams + "nhl/stanley cup/period" → Ice Hockey
+Rugby league team names + "try/nrl/state of origin" → Rugby League
 
 ━━ MARKET TYPE INFERENCE ━━
 "to win" / no market specified / match odds → MATCH_ODDS
@@ -119,6 +122,7 @@ event_name is the team/event to SEARCH FOR on Betfair. selection_name is what yo
 - Over/under with team context ("Over 2.5 goals in Man City game"): selection_name = "Over 2.5", event_name = "Man City"
 - Over/under with two teams ("Over 2.5 goals Man City vs Arsenal"): selection_name = "Over 2.5", event_name = "Man City"
 - Horse/golf/racing bets: event_name = the race or tournament name if mentioned, else null
+- Outright/tournament winner bets ("X to win the <competition>"): selection_name = the team/player, event_name = the competition name. The outright market lives on a competition-level event, so searching by the team name would only find head-to-head fixtures.
 - No event context given: event_name = null (will fall back to searching by selection_name)
 
 ━━ EXAMPLES (follow these exactly) ━━
@@ -137,6 +141,9 @@ event_name is the team/event to SEARCH FOR on Betfair. selection_name is what yo
 "a tenner" → {"status":"clarification_needed","clarification_question":"What would you like to bet on?","missing_fields":["selection_name"]}
 "back Djokovic at Wimbledon 50" → {"status":"ok","selection_name":"Djokovic","event_name":"Djokovic","sport":"Tennis","side":"BACK","stake":50,"price":null,"market_type":"MATCH_ODDS","opponent":null,"competition":"Wimbledon","match_date":null}
 "back Verstappen to win the championship 100" → {"status":"ok","selection_name":"Verstappen","event_name":"Verstappen","sport":"Motorsport","side":"BACK","stake":100,"price":null,"market_type":"OUTRIGHT_WINNER","opponent":null,"competition":null,"match_date":null}
+"England to win the World Cup 20" → {"status":"ok","selection_name":"England","event_name":"World Cup","sport":"Football","side":"BACK","stake":20,"price":null,"market_type":"OUTRIGHT_WINNER","opponent":null,"competition":"World Cup","match_date":null}
+"back Arsenal to win the Premier League 50" → {"status":"ok","selection_name":"Arsenal","event_name":"Premier League","sport":"Football","side":"BACK","stake":50,"price":null,"market_type":"OUTRIGHT_WINNER","opponent":null,"competition":"Premier League","match_date":null}
+"back St. Kilda to win the Premiership 20" → {"status":"ok","selection_name":"St Kilda","event_name":"AFL","sport":"Australian Rules","side":"BACK","stake":20,"price":null,"market_type":"OUTRIGHT_WINNER","opponent":null,"competition":"AFL","match_date":null}
 "back Desert Crown each way 25" → {"status":"ok","selection_name":"Desert Crown","event_name":null,"sport":"Horse Racing","side":"BACK","stake":25,"price":null,"market_type":"EACH_WAY","opponent":null,"competition":null,"match_date":null}
 "back Rory McIlroy top 5 at the Masters 40" → {"status":"ok","selection_name":"Rory McIlroy","event_name":"Masters","sport":"Golf","side":"BACK","stake":40,"price":null,"market_type":"TOP_5_FINISH","opponent":null,"competition":"Masters","match_date":null}
 "back Real Madrid at 2.5 for 50" → {"status":"ok","selection_name":"Real Madrid","event_name":"Real Madrid","sport":"Football","side":"BACK","stake":50,"price":2.5,"market_type":"MATCH_ODDS","opponent":null,"competition":null,"match_date":null}
@@ -226,6 +233,7 @@ class AIInterpreter:
         response = _client.chat.completions.create(
             model="gpt-4o-mini",
             temperature=0,
+            response_format={"type": "json_object"},
             messages=[
                 {
                     "role": "system",

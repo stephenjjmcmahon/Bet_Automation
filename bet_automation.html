@@ -534,8 +534,14 @@ async function submitGenericClarify(encodedOriginal) {
 
 function renderSlip(p) {
   const stake = p.stake || 0, price = p.price || 0;
-  const ret = (stake * price).toFixed(2);
-  const profit = (stake * (price - 1)).toFixed(2);
+  const isLay = p.side === 'LAY';
+  // BACK: stake returns stake×price, profit is stake×(price-1).
+  // LAY:  you accept `stake` as the backer's stake — profit if your lay wins is
+  //       that stake; the headline figure is your liability, stake×(price-1).
+  const headlineLabel = isLay ? 'Liability (at risk)' : 'Potential return';
+  const ret = (isLay ? stake * (price - 1) : stake * price).toFixed(2);
+  const profitLabel = isLay ? 'Profit if it loses' : 'Profit if wins';
+  const profit = (isLay ? stake : stake * (price - 1)).toFixed(2);
   const startTime = p.event_start_time ? formatEventTime(p.event_start_time) : '—';
 
   document.getElementById('betslip-panel').innerHTML = `
@@ -553,7 +559,7 @@ function renderSlip(p) {
     </div>
     <div class="slip-body">
       <div class="slip-selection">${p.event_name || p.selection_name}</div>
-      <div style="font-size:var(--text-sm);color:var(--color-text-muted);margin-top:var(--space-1)">Betting on: <strong>${p.runner_name || p.selection_name}</strong></div>
+      <div style="font-size:var(--text-sm);color:var(--color-text-muted);margin-top:var(--space-1)">Betting on: <strong>${p.runner_name || p.selection_name}</strong>${p.market_type && p.market_type.endsWith('_LINE') ? ' <span style="font-size:var(--text-xs);color:var(--color-text-faint)">(Line market — Back = Under, Lay = Over, all bets settle at 2.0)</span>' : ''}</div>
       <div class="slip-row">
         <div class="slip-field"><span class="slip-field-label">Bet Type</span><span class="slip-field-value">${p.side === 'BACK' ? 'Back' : 'Lay'}</span></div>
         <div class="slip-field"><span class="slip-field-label">Start Time</span><span class="slip-field-value" style="font-size:var(--text-sm)">${startTime}</span></div>
@@ -566,10 +572,10 @@ function renderSlip(p) {
         </div>
       </div>
       <div class="slip-returns">
-        <span class="slip-returns-label">Potential return</span>
+        <span class="slip-returns-label" id="returns-label">${headlineLabel}</span>
         <span class="slip-returns-value" id="returns-value">£${ret}</span>
       </div>
-      <div style="font-size:var(--text-xs);color:var(--color-text-muted)">Profit if wins: <strong style="color:var(--color-primary);font-family:var(--font-mono)" id="profit-value">£${profit}</strong></div>
+      <div style="font-size:var(--text-xs);color:var(--color-text-muted)"><span id="profit-label">${profitLabel}</span>: <strong style="color:var(--color-primary);font-family:var(--font-mono)" id="profit-value">£${profit}</strong></div>
     </div>
     <div class="slip-divider"></div>
     <div class="feedback-bar" id="feedback-bar">
@@ -598,8 +604,9 @@ function updateReturns() {
   if (!s || !current) return;
   const stake = parseFloat(s.value) || 0;
   const price = current.price || 0;
-  if (r) r.textContent = '£' + (stake * price).toFixed(2);
-  if (p) p.textContent = '£' + (stake * (price - 1)).toFixed(2);
+  const isLay = current.side === 'LAY';
+  if (r) r.textContent = '£' + (isLay ? stake * (price - 1) : stake * price).toFixed(2);
+  if (p) p.textContent = '£' + (isLay ? stake : stake * (price - 1)).toFixed(2);
 }
 
 function dismissSlip() {
