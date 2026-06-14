@@ -6,6 +6,13 @@ COMPETITION_SPORTS = {
     "greyhound racing", "cycling", "politics", "special bets",
 }
 
+# Subset of COMPETITION_SPORTS where an event is a MEETING and each race is a
+# WIN/PLACE market beneath it (runner = horse/dog). These bypass the AI event
+# pick entirely: the race is found deterministically by scanning every
+# upcoming market's runners for the named horse/dog (see
+# search_service.resolve_racing_markets).
+RACING_SPORTS = {"horse racing", "greyhound racing"}
+
 SPORT_EVENT_TYPE_MAP = {
     "soccer": "1",          # Teamname v Teamname
     "football": "1",

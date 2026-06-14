@@ -33,6 +33,7 @@ class BetOutput(BaseModel):
     price: Optional[float] = None
     market_type: Optional[str] = None
     line: Optional[float] = None
+    places: Optional[int] = None
     opponent: Optional[str] = None
     competition: Optional[str] = None
     match_date: Optional[str] = None
@@ -90,9 +91,6 @@ Rugby league team names + "try/nrl/state of origin" → Rugby League
 "asian handicap" → ASIAN_HANDICAP
 "draw no bet" / "dnb" → DRAW_NO_BET
 "half time" / "ht result" → HALF_TIME
-"each way" / "ew" → EACH_WAY
-"to place" (horse racing) → PLACE
-"to win the race" / "win" (horse racing) → WIN
 "top 5" (golf) → TOP_5_FINISH | "top 10" (golf) → TOP_10_FINISH
 "to win the tournament" / "tournament winner" / "outright" → OUTRIGHT_WINNER
 "make the cut" (golf) → MAKE_CUT
@@ -101,6 +99,16 @@ Rugby league team names + "try/nrl/state of origin" → Rugby League
 "championship" / "title" (F1/sport season) → OUTRIGHT_WINNER
 "top batsman" → TOP_BATSMAN | "top bowler" → TOP_BOWLER
 "map winner" (esports) → MAP_WINNER
+
+━━ RACING MARKET TYPES (horse racing / greyhound racing ONLY) ━━
+Default — "back <horse/dog>" / "to win" with no other qualifier → WIN (never MATCH_ODDS or OUTRIGHT_WINNER for racing)
+"to place" / "for a place" / "to be placed" → PLACE, places=null (standard place market)
+"top N" / "in the top N" / "N places" / "to finish in the top N" / "top N finish" → PLACE, places=N (e.g. "top 4" → places=4)
+"ante post" / "antepost" / "ante-post" → ANTEPOST_WIN
+"each way" / "ew" → EACH_WAY
+"forecast" → FORECAST | "reverse forecast" → REV_FORECAST | "tricast" → TRICAST
+"<runner> to beat <runner>" (racing) → MATCH_BET | "winning distance" → RACE_WIN_DIST
+For racing, event_name = the MEETING/TRACK if mentioned (e.g. "at Ascot" → "Ascot", "the 19:30 at Romford" → "Romford"), else null. NEVER put the horse/dog name in event_name.
 
 ━━ LINE EXTRACTION ━━
 line: the numeric handicap or total line when the market has multiple lines to choose from, else null.
@@ -121,7 +129,8 @@ event_name is the team/event to SEARCH FOR on Betfair. selection_name is what yo
 - Player prop with team context ("Haaland to score in Man City game"): selection_name = "Haaland", event_name = "Man City"
 - Over/under with team context ("Over 2.5 goals in Man City game"): selection_name = "Over 2.5", event_name = "Man City"
 - Over/under with two teams ("Over 2.5 goals Man City vs Arsenal"): selection_name = "Over 2.5", event_name = "Man City"
-- Horse/golf/racing bets: event_name = the race or tournament name if mentioned, else null
+- Golf/motorsport bets: event_name = the race or tournament name if mentioned, else null
+- Horse/greyhound racing bets: selection_name = the horse/dog, event_name = the meeting/track if mentioned (else null — the runner is found by scanning races)
 - Outright/tournament winner bets ("X to win the <competition>"): selection_name = the team/player, event_name = the competition name. The outright market lives on a competition-level event, so searching by the team name would only find head-to-head fixtures.
 - No event context given: event_name = null (will fall back to searching by selection_name)
 
@@ -145,6 +154,13 @@ event_name is the team/event to SEARCH FOR on Betfair. selection_name is what yo
 "back Arsenal to win the Premier League 50" → {"status":"ok","selection_name":"Arsenal","event_name":"Premier League","sport":"Football","side":"BACK","stake":50,"price":null,"market_type":"OUTRIGHT_WINNER","opponent":null,"competition":"Premier League","match_date":null}
 "back St. Kilda to win the Premiership 20" → {"status":"ok","selection_name":"St Kilda","event_name":"AFL","sport":"Australian Rules","side":"BACK","stake":20,"price":null,"market_type":"OUTRIGHT_WINNER","opponent":null,"competition":"AFL","match_date":null}
 "back Desert Crown each way 25" → {"status":"ok","selection_name":"Desert Crown","event_name":null,"sport":"Horse Racing","side":"BACK","stake":25,"price":null,"market_type":"EACH_WAY","opponent":null,"competition":null,"match_date":null}
+"back Constitution Hill 20" → {"status":"ok","selection_name":"Constitution Hill","event_name":null,"sport":"Horse Racing","side":"BACK","stake":20,"price":null,"market_type":"WIN","opponent":null,"competition":null,"match_date":null}
+"Desert Crown to place at Ascot 10" → {"status":"ok","selection_name":"Desert Crown","event_name":"Ascot","sport":"Horse Racing","side":"BACK","stake":10,"price":null,"market_type":"PLACE","places":null,"opponent":null,"competition":null,"match_date":null}
+"back Kyprios to finish in the top 4 at Ascot 15" → {"status":"ok","selection_name":"Kyprios","event_name":"Ascot","sport":"Horse Racing","side":"BACK","stake":15,"price":null,"market_type":"PLACE","places":4,"opponent":null,"competition":null,"match_date":null}
+"50 ante post on Galopin Des Champs for the Gold Cup" → {"status":"ok","selection_name":"Galopin Des Champs","event_name":null,"sport":"Horse Racing","side":"BACK","stake":50,"price":null,"market_type":"ANTEPOST_WIN","opponent":null,"competition":"Gold Cup","match_date":null}
+"back Galopin Des Champs to win the Gold Cup 50" → {"status":"ok","selection_name":"Galopin Des Champs","event_name":null,"sport":"Horse Racing","side":"BACK","stake":50,"price":null,"market_type":"WIN","opponent":null,"competition":"Gold Cup","match_date":null}
+"back Swift Dancer in the 19:30 at Romford 10" → {"status":"ok","selection_name":"Swift Dancer","event_name":"Romford","sport":"Greyhound Racing","side":"BACK","stake":10,"price":null,"market_type":"WIN","opponent":null,"competition":null,"match_date":"19:30"}
+"forecast Mystic Star then Lunar Glow 5" → {"status":"ok","selection_name":"Mystic Star","event_name":null,"sport":"Horse Racing","side":"BACK","stake":5,"price":null,"market_type":"FORECAST","opponent":"Lunar Glow","competition":null,"match_date":null}
 "back Rory McIlroy top 5 at the Masters 40" → {"status":"ok","selection_name":"Rory McIlroy","event_name":"Masters","sport":"Golf","side":"BACK","stake":40,"price":null,"market_type":"TOP_5_FINISH","opponent":null,"competition":"Masters","match_date":null}
 "back Real Madrid at 2.5 for 50" → {"status":"ok","selection_name":"Real Madrid","event_name":"Real Madrid","sport":"Football","side":"BACK","stake":50,"price":2.5,"market_type":"MATCH_ODDS","opponent":null,"competition":null,"match_date":null}
 """
@@ -192,6 +208,7 @@ class AIInterpreter:
                 price=result.price,
                 market_type=result.market_type or "MATCH_ODDS",
                 line=result.line,
+                places=result.places,
                 opponent=result.opponent,
                 competition=result.competition,
                 match_date=result.match_date,
@@ -273,3 +290,72 @@ with up to {n} selections ranked from best to worst match.
             s for s in result.get("selections", [])
             if s.get("event_id") and s.get("market_type")
         ]
+
+    @staticmethod
+    def select_racing_runner(user_input: str, markets: list) -> Optional[dict]:
+        """Pick the race + runner matching a racing bet from one meeting's markets.
+
+        Tier-2 racing fallback: exact runner-name matching found nothing, so let
+        the model do typo-tolerant matching over the meeting's actual runner
+        names. Returns {"market_id", "selection_id"} or None if nothing plausible.
+        """
+        if not markets:
+            return None
+
+        races_text = json.dumps(
+            [
+                {
+                    "market_id": m["marketId"],
+                    "race": m.get("marketName", ""),
+                    "start": m.get("marketStartTime", ""),
+                    "meeting": m.get("event", {}).get("name", ""),
+                    "runners": [
+                        {"selection_id": r["selectionId"], "name": r.get("runnerName", "")}
+                        for r in m.get("runners", [])
+                    ],
+                }
+                for m in markets
+            ],
+            indent=2,
+        )
+
+        response = _client.chat.completions.create(
+            model="gpt-4o-mini",
+            temperature=0,
+            response_format={"type": "json_object"},
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You match a user's horse/greyhound racing bet to the correct "
+                        "race and runner. The user may have misspelled the runner's "
+                        "name. Return ONLY valid JSON. No explanation."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": f"""The user wants to bet: "{user_input}"
+
+Races and their runners:
+{races_text}
+
+Return JSON: {{"market_id": "<market_id>", "selection_id": <selection_id>}} for the runner that best matches the request.
+- Tolerate typos, partial names, and phonetic spellings.
+- market_id and selection_id must come from the list above, from the same race.
+- If no runner plausibly matches, return {{"market_id": null, "selection_id": null}}.
+""",
+                },
+            ],
+        )
+
+        content = response.choices[0].message.content
+        if content is None:
+            return None
+
+        result = json.loads(content.strip())
+        if result.get("market_id") and result.get("selection_id"):
+            return {
+                "market_id": str(result["market_id"]),
+                "selection_id": int(result["selection_id"]),
+            }
+        return None
