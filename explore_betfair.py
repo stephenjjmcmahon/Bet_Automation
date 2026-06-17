@@ -14,8 +14,36 @@ from backend.config.sport_mapping import SPORT_EVENT_TYPE_MAP
 load_dotenv()
 
 # ── Config ────────────────────────────────────────────────────────────────────
-SPORT = "horse racing"   # change to any key in SPORT_EVENT_TYPE_MAP
+SPORT = "rugby union"   # change to any key in SPORT_EVENT_TYPE_MAP
 # ─────────────────────────────────────────────────────────────────────────────
+
+
+def list_market_types_for_sport(sport: str, session: dict) -> list:
+    """Print every market type Betfair currently exposes for `sport`, busiest first.
+
+    Returns the raw list so callers can reuse it. `sport` must be a key in
+    SPORT_EVENT_TYPE_MAP (case-insensitive).
+    """
+    event_type_id = SPORT_EVENT_TYPE_MAP.get(sport.lower())
+    if not event_type_id:
+        print(f"Unknown sport '{sport}'. Available: {list(SPORT_EVENT_TYPE_MAP.keys())}")
+        return []
+
+    market_types = betfair_post(
+        "listMarketTypes/", {"filter": {"eventTypeIds": [event_type_id]}}, session
+    )
+    print(f"=== Market types for {sport} ({len(market_types)} found) ===")
+    for mt in sorted(market_types, key=lambda x: x.get("marketCount", 0), reverse=True):
+        print(f"  {mt['marketType']:<35}  {mt.get('marketCount', '?')} markets")
+    print()
+    return market_types
+
+
+def list_market_types_for_all_sports(session: dict) -> None:
+    """Print every market type for every sport in SPORT_EVENT_TYPE_MAP."""
+    print("########## Market types for ALL sports ##########\n")
+    for sport in SPORT_EVENT_TYPE_MAP:
+        list_market_types_for_sport(sport, session)
 
 username = os.getenv("BETFAIR_USERNAME") or input("Betfair username: ")
 password = os.getenv("BETFAIR_PASSWORD") or input("Betfair password: ")
@@ -28,6 +56,9 @@ except Exception as e:
     print(f"Login failed: {e}")
     sys.exit(1)
 
+# Every market type for every sport.
+list_market_types_for_all_sports(session)
+
 event_type_id = SPORT_EVENT_TYPE_MAP.get(SPORT)
 if not event_type_id:
     print(f"Unknown sport '{SPORT}'. Available: {list(SPORT_EVENT_TYPE_MAP.keys())}")
@@ -36,11 +67,7 @@ if not event_type_id:
 filter_ = {"eventTypeIds": [event_type_id]}
 
 # Market types
-market_types = betfair_post("listMarketTypes/", {"filter": filter_}, session)
-print(f"=== Market types for {SPORT} ({len(market_types)} found) ===")
-for mt in sorted(market_types, key=lambda x: x.get("marketCount", 0), reverse=True):
-    print(f"  {mt['marketType']:<35}  {mt.get('marketCount', '?')} markets")
-print()
+market_types = list_market_types_for_sport(SPORT, session)
 
 # Events
 events = betfair_post("listEvents/", {"filter": filter_}, session)

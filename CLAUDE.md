@@ -104,12 +104,36 @@ All logs go in `logs/` (auto-created):
 
 ---
 
+## Rugby union market types (event type 5)
+
+All seven market types Betfair exposes for rugby union resolve through the normal H2H path (`find_event_candidates` → `select_top_events` → `resolve_market`). Notes on the non-obvious ones:
+
+| Type | Runner naming | Resolution |
+|---|---|---|
+| `MATCH_ODDS` | team / "Draw" | name match |
+| `OUTRIGHT_WINNER` | team, on a **competition-level** event ("United Rugby Championship") | name match; parser sets `event_name`=competition. NB rugby outright code really is `OUTRIGHT_WINNER` (unlike football's `WINNER`) |
+| `COMBINED_TOTAL` | "Over"/"Under", one `selectionId` per side repeated across every handicap line; `line` picks the row | name match on "Over"/"Under" + `line` filter in `get_best_price` |
+| `HANDICAP` | team name repeated across handicap lines (same `selectionId`); the team's line is **negative when it's the favourite giving points** | name match on team + signed `line`. Parser maps "on the handicap" → `HANDICAP` (asian handicap stays `ASIAN_HANDICAP`) |
+| `WINNING_MARGIN` | **varies by competition** — "Hurricanes 15 +" (Super Rugby) vs "Northampton to win by 15+" (Premiership) | parser can't guess the exact string → AI runner fallback (below) |
+| `HALF_TIME_FULL_TIME` | "Team - Team" HT/FT pairs, draws as "Any Draw"/"Draw - Draw" | parser emits "Team - Team"; AI runner fallback covers wording variance |
+| `UNUSED` | market is literally named **"Head To Head"** — a 2-way money line (no draw) | parser maps "head to head"/"h2h"/"money line" → the literal code `UNUSED` |
+
+Two mechanisms make this work, both general (not rugby-specific):
+
+1. **Market-type pin** (`select_top_events`): once the gpt-4o parser emits a market_type that Betfair actually offers for the sport, it's forced onto every selection so the lighter gpt-4o-mini event-picker can't substitute a "nicer looking" code. Without this, "head to head" was being switched from `UNUSED` to `MATCH_ODDS` because `UNUSED` reads like a junk value. When the parsed code is *not* offered (e.g. the parser's `OUTRIGHT_WINNER` → football's `WINNER`), the model's pick is left alone.
+
+2. **AI runner fallback** (`AIInterpreter.select_market_runner`, called from `resolve_market`): when `resolve_selection`'s substring match returns nothing, the actual runner names are handed to gpt-4o-mini to map the request (tolerant of "15+" vs "15 +" vs "to win by 15+"). This is what makes `WINNING_MARGIN`/`HALF_TIME_FULL_TIME` resolve despite per-competition naming. `resolve_market` therefore takes the original `user_input` so the fallback has full context.
+
+Liquidity caveat: many of these markets (handicap/total lines far from the expected score, HT/FT combos) are thinly traded, especially days before kickoff, so `get_best_price` will reject a large stake even when resolution succeeds. That's a real-market limitation, not a resolution bug.
+
+---
+
 ## Two AI models in use
 
 | Model | Where | Purpose |
 |---|---|---|
 | `gpt-4o` | `AIInterpreter.interpret()` | Structured parsing of natural language → `ParsedBet`. Uses `response_format=BetOutput` for guaranteed JSON schema output. |
-| `gpt-4o-mini` | `AIInterpreter.select_top_events()` | Ranking candidate Betfair events + picking the right market type. Cheaper because it's a simpler matching task. |
+| `gpt-4o-mini` | `AIInterpreter.select_top_events()` / `select_racing_runner()` / `select_market_runner()` | Ranking candidate Betfair events + picking the market type, and typo/format-tolerant runner matching (racing runners, and the non-racing fallback when substring matching fails). Cheaper because these are simpler matching tasks. |
 
 ---
 

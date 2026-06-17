@@ -113,6 +113,7 @@ def _build_slip(
             parsed_bet.stake,
             request.session,
             line=effective_line,
+            book=market_ids.get("book"),
         )
     except (MarketSuspendedError, InsufficientLiquidityError, ValueError) as e:
         print(f"DEBUG get_best_price failed for {market_ids['marketId']}/{chosen_market_type}: {type(e).__name__}: {e}")
@@ -165,6 +166,7 @@ def _build_slip(
         competition=market_ids.get("competition"),
         event_start_time=event_start_time,
         market_type=chosen_market_type,
+        line=parsed_bet.line,
         side=effective_side,
         price=live_price,
         requested_price=parsed_bet.price,
@@ -249,7 +251,9 @@ def prepare_bet(request: Request, body: BetRequest):
         print(f"DEBUG market_types: {market_types}")
         print()
 
-        selections = AIInterpreter.select_top_events(body.user_input, candidates, market_types)
+        selections = AIInterpreter.select_top_events(
+            body.user_input, candidates, market_types, parsed_bet=parsed_bet
+        )
         print(f"DEBUG selections: {selections}")
         print()
 
@@ -272,7 +276,7 @@ def prepare_bet(request: Request, body: BetRequest):
             event_start_time = selected["event"].get("openDate") if selected else None
 
             try:
-                market_ids = resolve_market(event_id, parsed_bet, request.session, market_type=chosen_market_type)
+                market_ids = resolve_market(event_id, parsed_bet, request.session, market_type=chosen_market_type, user_input=body.user_input)
             except ValueError as e:
                 print(f"DEBUG resolve_market failed for {event_id}: {e}")
                 print()
@@ -291,8 +295,8 @@ def prepare_bet(request: Request, body: BetRequest):
                 slips.append(slip)
 
     print(f"DEBUG prepared slips ({len(slips)}):")
+    handicap_str = f"  handicap={parsed_bet.line}" if parsed_bet.line is not None else ""
     for i, s in enumerate(slips, 1):
-        handicap_str = f"  handicap={parsed_bet.line}" if parsed_bet.line is not None else ""
         print(f"  {i}.  event={s.event_name}  |  market={s.market_type}  |  runner={s.runner_name or s.selection_name}{handicap_str}  |  {s.side} @ {s.price}")
     print()
 
@@ -336,7 +340,30 @@ def confirm_bet(slip_id: str, request: Request, body: ConfirmRequest = ConfirmRe
 
     logger.log_bet_confirmed(slip_id=slip_id, time_to_confirm_ms=time_to_confirm_ms)
 
-    return place_orders(betslip["marketId"], betslip["instructions"], request.session)
+    result = place_orders(betslip["marketId"], betslip["instructions"], request.session)
+
+    # Betfair returns HTTP 200 even when it rejects the bet (e.g. stake below the
+    # exchange minimum) — the real outcome is in the PlaceExecutionReport body.
+    # Don't report success unless the order actually went on, or the user gets a
+    # "placed" message for a bet that never reached their account.
+    reports = result.get("instructionReports") or []
+    placed = result.get("status") == "SUCCESS" and bool(reports) and all(
+        r.get("status") == "SUCCESS" for r in reports
+    )
+    if not placed:
+        error_code = (
+            (reports[0].get("errorCode") if reports else None)
+            or result.get("errorCode")
+            or "UNKNOWN"
+        )
+        print(f"DEBUG placeOrders rejected: status={result.get('status')} errorCode={error_code} body={result}")
+        print()
+        raise HTTPException(
+            status_code=400,
+            detail=f"Betfair did not place the bet (code: {error_code}). It has not been placed on your account.",
+        )
+
+    return result
 
 
 @router.post("/api/feedback")

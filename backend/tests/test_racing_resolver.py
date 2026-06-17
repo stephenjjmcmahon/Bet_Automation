@@ -90,6 +90,21 @@ class TestTier1Matching:
                 resolve_racing_markets(_bet(selection="Unknown Horse"), "back Unknown Horse 20", SESSION)
         assert "meeting" in exc.value.question.lower()
 
+    def test_exact_name_beats_substring_noise_in_full_scan(self):
+        # 'Star' substring-matches many runners across the day, but one horse is
+        # named exactly 'Star' — the exact match must win rather than blowing past
+        # MAX_RACING_MATCHES and forcing a clarification.
+        noisy = [
+            _market("9.1", "Ascot", "14:00", [(901, "Star Gazer"), (902, "Lucky Star")]),
+            _market("9.2", "Kempton", "14:05", [(903, "Star")], event_id="E9"),
+            _market("9.3", "York", "14:10", [(904, "Northern Star"), (905, "Star Light")], event_id="E10"),
+        ]
+        with patch("backend.services.racing_service.list_racing_markets", return_value=noisy):
+            matches = resolve_racing_markets(_bet(selection="Star"), "back Star 20", SESSION)
+        assert len(matches) == 1
+        assert matches[0]["marketId"] == "9.2"
+        assert matches[0]["selectionId"] == 903
+
     def test_meeting_name_narrows_the_scan(self):
         with patch("backend.services.racing_service.list_racing_markets",
                    return_value=[KEMPTON_1900, ROMFORD_1930]):
@@ -187,6 +202,18 @@ class TestPlaceCount:
     def test_unavailable_place_count_is_declined(self, place_patches):
         with pytest.raises(RacingClarificationError):
             resolve_racing_markets(_bet(market_type="PLACE", places=5), "Constitution Hill top 5 20", SESSION)
+
+    def test_top_4_falls_back_to_market_name_when_book_lacks_winners(self):
+        # numberOfWinners absent from the book (empty/None) → derive the places
+        # paid from the OTHER_PLACE market name ('4 TBP' → 4) rather than wrongly
+        # declining a market that genuinely exists.
+        with patch("backend.services.racing_service.list_racing_markets", return_value=[ASCOT_1430_TBP]), \
+             patch("backend.services.racing_service.list_place_markets_for_event",
+                   return_value=[ASCOT_1430_TBP, ASCOT_1430_2TBP, ASCOT_1430_4TBP]), \
+             patch("backend.services.racing_service.get_market_winners", return_value={}):
+            matches = resolve_racing_markets(_bet(market_type="PLACE", places=4), "Constitution Hill top 4 20", SESSION)
+        assert matches[0]["marketId"] == "1.502"
+        assert matches[0]["places"] == 4
 
 
 def _bet_comp(selection, competition, places=None):

@@ -60,13 +60,17 @@ def list_events(team_name: str, event_type_id: str, session: dict):
 
 
 def list_market_catalogue(event_id: str, market_type: str, session: dict):
+    # maxResults is high enough to return every market of the type for an event:
+    # some types span several markets that differ only by line (e.g. AFL
+    # WINNING_MARGIN 24.5 / 39.5 / spread). MARKET_DESCRIPTION lets the resolver
+    # tell those apart so it can reach more than the first one.
     payload = {
         "filter": {
             "eventIds": [event_id],
             "marketTypeCodes": [market_type],
         },
-        "maxResults": "5",
-        "marketProjection": ["RUNNER_DESCRIPTION", "EVENT", "COMPETITION"],
+        "maxResults": "20",
+        "marketProjection": ["RUNNER_DESCRIPTION", "EVENT", "COMPETITION", "MARKET_DESCRIPTION"],
     }
     return betfair_post("listMarketCatalogue/", payload, session) # Get the runners list here
 

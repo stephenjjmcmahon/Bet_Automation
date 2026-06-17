@@ -10,13 +10,15 @@ class InsufficientLiquidityError(Exception):
     """Raised when available size at the best price is less than the requested stake."""
 
 
-def get_best_price(market_id: str, selection_id: str, side: str, stake: float, session: dict, line: float | None = None) -> float:
+def get_best_price(market_id: str, selection_id: str, side: str, stake: float, session: dict, line: float | None = None, book: dict | None = None) -> float:
     """
     Return the best available live price for a runner and validate liquidity.
 
-    Fetches a fresh market book from Betfair, locates the requested runner,
-    and returns the top-of-book price for the requested side. Also checks that
-    enough liquidity exists at that price to cover the full stake.
+    Locates the requested runner in the market book and returns the top-of-book
+    price for the requested side, checking that enough liquidity exists at that
+    price to cover the full stake. `book` may be a market book already fetched by
+    the resolver (which fetches one to drop inactive runners) so the same request
+    isn't made to Betfair twice; when omitted a fresh book is fetched here.
 
     Raises
     ------
@@ -30,7 +32,8 @@ def get_best_price(market_id: str, selection_id: str, side: str, stake: float, s
         If there are no offers on the requested side, or the available size
         at the best price is smaller than the requested stake.
     """
-    book = get_market_book(market_id, session)
+    if book is None:
+        book = get_market_book(market_id, session)
 
     if book["status"] == "SUSPENDED":
         raise MarketSuspendedError(
@@ -75,6 +78,16 @@ def get_best_price(market_id: str, selection_id: str, side: str, stake: float, s
     best = offers[0]
     best_price = best["price"]
     available_size = best["size"]
+
+    # 1.01 is Betfair's price floor. When backing, an offer at the floor means
+    # nobody is pricing the selection for real (common on freshly-opened, thin
+    # markets) — backing at 1.01 returns essentially the stake. Treat it as no
+    # real market rather than presenting a misleading slip.
+    if side == "BACK" and best_price <= 1.01:
+        raise InsufficientLiquidityError(
+            f"No real market price for runner {selection_id} in market {market_id} — "
+            f"the only back offer is at the 1.01 floor."
+        )
 
     if available_size < stake:
         raise InsufficientLiquidityError(

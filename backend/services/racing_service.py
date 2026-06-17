@@ -1,6 +1,8 @@
+import re
+
 from backend.services.betfair_client import list_racing_markets, list_place_markets_for_event, get_market_winners
 from backend.services.market_resolver import resolve_selection
-from backend.config.sport_mapping import SPORT_EVENT_TYPE_MAP
+from backend.config.sport_mapping import event_type_id_for
 
 # ── Racing (horse / greyhound) ────────────────────────────────────────────────
 # Racing bets resolve by runner name, not event name, so they skip the AI
@@ -56,11 +58,26 @@ def _racing_match(market: dict, market_type: str, selection_id: int, runner_name
         "selectionId": selection_id,
         "runnerName": runner_name,
         "competition": meeting,                      # meeting, e.g. "Ascot 12th Jun"
-        "eventName": f"{meeting} — {race}".strip(" —"),
+        "eventName": " — ".join(p for p in (meeting, race) if p),
         "marketStartTime": market.get("marketStartTime"),
         "marketType": market_type,
         "places": places,                            # number of places paid (place bets only)
     }
+
+
+def _places_paid(market: dict, winners: dict) -> int | None:
+    """Number of places a place market pays.
+
+    Prefer numberOfWinners from the market book; when the book omits it (a market
+    not yet open can return it as None), fall back to the count embedded in an
+    OTHER_PLACE market name ('4 TBP' → 4). The standard 'To Be Placed' market
+    carries no count in its name, so it stays None if the book didn't supply one.
+    """
+    n = winners.get(market["marketId"])
+    if n is not None:
+        return n
+    m = re.search(r"(\d+)\s*TBP", market.get("marketName", ""), re.IGNORECASE)
+    return int(m.group(1)) if m else None
 
 
 def _select_place_market(event_id, selection_name: str, places: int | None, session: dict) -> dict | None:
@@ -91,13 +108,58 @@ def _select_place_market(event_id, selection_name: str, places: int | None, sess
         chosen = next((c for c in candidates if _is_standard(c[0])), candidates[0])
     else:
         # Prefer the standard market on a tie; else any market paying `places`.
-        matching = [c for c in candidates if winners.get(c[0]["marketId"]) == places]
+        matching = [c for c in candidates if _places_paid(c[0], winners) == places]
         if not matching:
             return None
         chosen = next((c for c in matching if _is_standard(c[0])), matching[0])
 
     market, selection_id, runner_name = chosen
-    return _racing_match(market, "PLACE", selection_id, runner_name, places=winners.get(market["marketId"]))
+    return _racing_match(market, "PLACE", selection_id, runner_name, places=_places_paid(market, winners))
+
+
+def _scope_markets(markets: list[dict], scope: str | None, *, fields: tuple[str, ...]) -> list[dict]:
+    """Markets whose selected field(s) contain `scope` (case-insensitive substring).
+
+    `fields` chooses what to match against: "event" (the meeting event name)
+    and/or "market" (the market name). Returns [] when `scope` is blank or
+    nothing matches — callers decide whether to fall back to the unscoped list,
+    so a mis-typed track/festival name lets the runner name disambiguate rather
+    than dead-ending.
+    """
+    scope = (scope or "").lower().strip()
+    if not scope:
+        return []
+    out = []
+    for m in markets:
+        event_hit = "event" in fields and scope in m.get("event", {}).get("name", "").lower()
+        market_hit = "market" in fields and scope in m.get("marketName", "").lower()
+        if event_hit or market_hit:
+            out.append(m)
+    return out
+
+
+def _scan_for_runner(pool: list[dict], selection_name: str, market_type: str) -> list[dict]:
+    """Runner matches in a pool, one slip per market, with exact names preferred.
+
+    Over the full-day scan (~450 markets) a short or common name substring-matches
+    many unrelated runners via resolve_selection's loose matching, burying a clean
+    exact hit and forcing a needless clarification. So take exact (case-insensitive)
+    name equality across the whole pool first; only fall back to substring matching
+    when nothing matches exactly — which preserves partial-name matches such as
+    "Spirit" → "Spirit Dancer".
+    """
+    target = selection_name.lower().strip()
+    exact, fuzzy = [], []
+    for m in pool:
+        runners = m.get("runners", [])
+        hit = next((r for r in runners if r.get("runnerName", "").lower().strip() == target), None)
+        if hit is not None:
+            exact.append(_racing_match(m, market_type, hit["selectionId"], hit.get("runnerName", "")))
+            continue
+        selection_id, runner_name = resolve_selection(runners, selection_name)
+        if selection_id is not None:
+            fuzzy.append(_racing_match(m, market_type, selection_id, runner_name or ""))
+    return exact or fuzzy
 
 
 def _antepost_pool(event_type_id, parsed_bet, session: dict) -> list[dict]:
@@ -109,27 +171,17 @@ def _antepost_pool(event_type_id, parsed_bet, session: dict) -> list[dict]:
     markets carry market type ANTEPOST_WIN and are named after the race/festival.
     The scope can land in either field — `competition` ("the Gold Cup") or
     `event_name` ("Royal Ascot", which looks like a venue to the parser) — so we
-    try both; if neither matches a market name we fall back to all of them and
-    let the runner name (and match count) disambiguate.
+    match both the market name and the event name; if neither matches we fall
+    back to all of them and let the runner name (and match count) disambiguate.
     """
     markets = list_racing_markets(event_type_id, "ANTEPOST_WIN", session)
-    scope = (parsed_bet.competition or parsed_bet.event_name or "").lower().strip()
-    scoped = [
-        m for m in markets
-        if scope in m.get("marketName", "").lower()
-        or scope in m.get("event", {}).get("name", "").lower()
-    ] if scope else markets
-    return scoped or markets
+    scope = parsed_bet.competition or parsed_bet.event_name
+    return _scope_markets(markets, scope, fields=("market", "event")) or markets
 
 
 def _antepost_exact(pool: list[dict], parsed_bet) -> list[dict]:
-    """Exact runner-name matches in the ante-post pool — one slip per market."""
-    matches = []
-    for m in pool:
-        selection_id, runner_name = resolve_selection(m.get("runners", []), parsed_bet.selection_name)
-        if selection_id is not None:
-            matches.append(_racing_match(m, "ANTEPOST_WIN", selection_id, runner_name or ""))
-    return matches
+    """Exact-preferred runner-name matches in the ante-post pool — one slip per market."""
+    return _scan_for_runner(pool, parsed_bet.selection_name, "ANTEPOST_WIN")
 
 
 def resolve_racing_markets(parsed_bet, user_input: str, session: dict) -> list[dict]:
@@ -149,10 +201,7 @@ def resolve_racing_markets(parsed_bet, user_input: str, session: dict) -> list[d
     """
     from backend.services.ai_interpreter import AIInterpreter  # local import: ai_interpreter is heavy (OpenAI client)
 
-    sport = parsed_bet.sport.lower()
-    event_type_id = SPORT_EVENT_TYPE_MAP.get(sport)
-    if not event_type_id:
-        raise ValueError(f"Unsupported sport: {sport}")
+    event_type_id = event_type_id_for(parsed_bet.sport)
 
     label = (parsed_bet.market_type or "WIN").upper()
     if label in RACING_UNSUPPORTED_MESSAGES:
@@ -183,19 +232,10 @@ def resolve_racing_markets(parsed_bet, user_input: str, session: dict) -> list[d
     # Scope to the named meeting when one was given. Substring match on the
     # event name ("Ascot" matches "Ascot 12th Jun"); if nothing matches the
     # supposed track name, fall back to the full scan rather than dead-ending.
-    meeting = (parsed_bet.event_name or "").lower().strip()
-    meeting_markets = []
-    if meeting:
-        meeting_markets = [
-            m for m in markets if meeting in m.get("event", {}).get("name", "").lower()
-        ]
+    meeting_markets = _scope_markets(markets, parsed_bet.event_name, fields=("event",))
     scoped = meeting_markets or markets
 
-    matches = []
-    for m in scoped:
-        selection_id, runner_name = resolve_selection(m.get("runners", []), parsed_bet.selection_name)
-        if selection_id is not None:
-            matches.append(_racing_match(m, market_type, selection_id, runner_name or ""))
+    matches = _scan_for_runner(scoped, parsed_bet.selection_name, market_type)
 
     if matches:
         if len(matches) <= MAX_RACING_MATCHES:
