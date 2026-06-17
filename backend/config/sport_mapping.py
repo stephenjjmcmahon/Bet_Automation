@@ -6,6 +6,13 @@ COMPETITION_SPORTS = {
     "greyhound racing", "cycling", "politics", "special bets",
 }
 
+# Subset of COMPETITION_SPORTS where an event is a MEETING and each race is a
+# WIN/PLACE market beneath it (runner = horse/dog). These bypass the AI event
+# pick entirely: the race is found deterministically by scanning every
+# upcoming market's runners for the named horse/dog (see
+# search_service.resolve_racing_markets).
+RACING_SPORTS = {"horse racing", "greyhound racing"}
+
 SPORT_EVENT_TYPE_MAP = {
     "soccer": "1",          # Teamname v Teamname
     "football": "1",
@@ -34,4 +41,22 @@ SPORT_EVENT_TYPE_MAP = {
     "ice hockey": "7524",       # Teamname @ Teamname, or competition name (e.g. "NHL")
     "volleyball": "998917",     # Teamname v Teamname (country or club)
     "cycling": "11",            # Race/tour name (e.g. "Tour de France")
+    "snooker": "6422",          # Playername v Playername, or tournament name
 }
+
+
+class UnsupportedSportError(ValueError):
+    """The parsed sport has no Betfair event-type id mapping."""
+
+
+def event_type_id_for(sport: str) -> str:
+    """Betfair event-type id for a sport name (case-insensitive).
+
+    Single lookup point so the normalization and the "unsupported sport" failure
+    are consistent everywhere — callers used to inline this and disagreed on
+    whether a miss should raise or silently return an empty result.
+    """
+    event_type_id = SPORT_EVENT_TYPE_MAP.get(sport.lower())
+    if not event_type_id:
+        raise UnsupportedSportError(f"Unsupported sport: {sport}")
+    return event_type_id

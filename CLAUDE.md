@@ -104,14 +104,59 @@ All logs go in `logs/` (auto-created):
 
 ---
 
+## Rugby union market types (event type 5)
+
+All seven market types Betfair exposes for rugby union resolve through the normal H2H path (`find_event_candidates` → `select_top_events` → `resolve_market`). Notes on the non-obvious ones:
+
+| Type | Runner naming | Resolution |
+|---|---|---|
+| `MATCH_ODDS` | team / "Draw" | name match |
+| `OUTRIGHT_WINNER` | team, on a **competition-level** event ("United Rugby Championship") | name match; parser sets `event_name`=competition. NB rugby outright code really is `OUTRIGHT_WINNER` (unlike football's `WINNER`) |
+| `COMBINED_TOTAL` | "Over"/"Under", one `selectionId` per side repeated across every handicap line; `line` picks the row | name match on "Over"/"Under" + `line` filter in `get_best_price` |
+| `HANDICAP` | team name repeated across handicap lines (same `selectionId`); the team's line is **negative when it's the favourite giving points** | name match on team + signed `line`. Parser maps "on the handicap" → `HANDICAP` (asian handicap stays `ASIAN_HANDICAP`) |
+| `WINNING_MARGIN` | **varies by competition** — "Hurricanes 15 +" (Super Rugby) vs "Northampton to win by 15+" (Premiership) | parser can't guess the exact string → AI runner fallback (below) |
+| `HALF_TIME_FULL_TIME` | "Team - Team" HT/FT pairs, draws as "Any Draw"/"Draw - Draw" | parser emits "Team - Team"; AI runner fallback covers wording variance |
+| `UNUSED` | market is literally named **"Head To Head"** — a 2-way money line (no draw) | parser maps "head to head"/"h2h"/"money line" → the literal code `UNUSED` |
+
+Two mechanisms make this work, both general (not rugby-specific):
+
+1. **Market-type pin** (`select_top_events`): once the gpt-4o parser emits a market_type that Betfair actually offers for the sport, it's forced onto every selection so the lighter gpt-4o-mini event-picker can't substitute a "nicer looking" code. Without this, "head to head" was being switched from `UNUSED` to `MATCH_ODDS` because `UNUSED` reads like a junk value. When the parsed code is *not* offered (e.g. the parser's `OUTRIGHT_WINNER` → football's `WINNER`), the model's pick is left alone.
+
+2. **AI runner fallback** (`AIInterpreter.select_market_runner`, called from `resolve_market`): when `resolve_selection`'s substring match returns nothing, the actual runner names are handed to gpt-4o-mini to map the request (tolerant of "15+" vs "15 +" vs "to win by 15+"). This is what makes `WINNING_MARGIN`/`HALF_TIME_FULL_TIME` resolve despite per-competition naming. `resolve_market` therefore takes the original `user_input` so the fallback has full context.
+
+Liquidity caveat: many of these markets (handicap/total lines far from the expected score, HT/FT combos) are thinly traded, especially days before kickoff, so `get_best_price` will reject a large stake even when resolution succeeds. That's a real-market limitation, not a resolution bug.
+
+---
+
 ## Two AI models in use
 
 | Model | Where | Purpose |
 |---|---|---|
 | `gpt-4o` | `AIInterpreter.interpret()` | Structured parsing of natural language → `ParsedBet`. Uses `response_format=BetOutput` for guaranteed JSON schema output. |
-| `gpt-4o-mini` | `AIInterpreter.select_top_events()` | Ranking candidate Betfair events + picking the right market type. Cheaper because it's a simpler matching task. |
+| `gpt-4o-mini` | `AIInterpreter.select_top_events()` / `select_racing_runner()` / `select_market_runner()` | Ranking candidate Betfair events + picking the market type, and typo/format-tolerant runner matching (racing runners, and the non-racing fallback when substring matching fails). Cheaper because these are simpler matching tasks. |
 
 ---
+
+## Racing (horse / greyhound) — different resolution path
+
+Betfair models racing as: **event = meeting** ("Ascot 12th Jun"), **market = individual race** (market name is the off-time), **runner = horse/dog**. `textQuery` never matches runner names, so you can't search Betfair for a horse.
+
+`RACING_SPORTS` (in `sport_mapping.py`) therefore bypass the AI event pick (`select_top_events`) entirely. `resolve_racing_markets()` in `search_service.py`:
+
+1. **Tier 1 (no AI):** one bulk `listMarketCatalogue` (`list_racing_markets()`) fetches every upcoming market of the bet's type (~450 WIN markets on a busy day; `marketStartTime.from = now`, no upper bound so bets days ahead work), then scans all runners for the name. A horse runs at most once per day, so a clean match identifies the race. 1–3 matches → that many slips (user picks, e.g. same greyhound name at two tracks). 0 or >3 → 422 clarification asking for the meeting.
+2. **Tier 2:** the clarification retry arrives with `event_name` = track; scope to that meeting's races, and if exact matching still fails, `AIInterpreter.select_racing_runner()` (gpt-4o-mini) does typo-tolerant matching over that one card's runners.
+
+Supported racing market types — all single-runner, all resolved identically (only the fetched market type differs): `WIN` (default — the parser may emit MATCH_ODDS/OUTRIGHT_WINNER, mapped to WIN), `PLACE`, `ANTEPOST_WIN` (explicit keyword "ante post", *or* the WIN→ante-post fallback below), and `EACH_WAY` (Betfair's **native** each-way market — one back settles win + place per the market's `eachWayDivisor`; no composition). FORECAST/REV_FORECAST/MATCH_BET/RACE_WIN_DIST/etc. are multi-selection or non-runner markets that don't fit the single-selection slip model — `RACING_UNSUPPORTED_MESSAGES` declines them cleanly.
+
+Caveat on EACH_WAY: only ~34 EACH_WAY markets exist on a busy day (vs 441 WIN), and they're thinly traded, so a lot of races won't have one — those return the normal `MarketSuspendedError`/`InsufficientLiquidityError`/not-found path.
+
+**WIN → ante-post fallback.** A horse entered only for a future race has no WIN market yet, so a plain "to win the Gold Cup" bet finds nothing in the WIN scan. When a WIN scan returns 0 exact matches and a race/festival is named — in **either** `competition` ("the Gold Cup") **or** `event_name` ("Royal Ascot", which the parser reads as a venue since it contains "Ascot") — `_antepost_pool` builds the `ANTEPOST_WIN` pool scoped to that name (falling back to all ante-post markets if the scope matches none, letting the runner name disambiguate). **Precedence matters and is the subtle bit. Exact always beats fuzzy, and the single fuzzy pass spans both pools.** A festival often has WIN markets for its *other* races (Royal Ascot's WIN cards appear days ahead), so the meeting filter can be non-empty while the target horse lives only in ante-post. Resolution order: (1) exact WIN scan, (2) exact ante-post scan (`_antepost_exact`) — a horse named exactly as typed in a future race wins here even when the meeting also has WIN cards, (3) **one** `select_racing_runner` (gpt-4o-mini) call over the **combined** pool — the meeting's WIN card *plus* the festival's ante-post markets, deduped by market id, each tagged with its own market type — then (4) clarification. The combined fuzzy pass is the fix for a *misspelled* name: a fixed order biases wrong (WIN-pool-first hallucinates a wrong WIN-card horse when the target is in ante-post; ante-post-first does the reverse), so the model sees every real candidate at once and picks the globally closest. **Resolving the AI's pick keys off its `selection_id`, not its `market_id`:** a horse entered in several races (ante-post 2yos commonly hold 2-3 engagements, e.g. "Aperoll" in both the Windsor Castle *and* Chesham Stakes) makes the model cross-wire the pair (market from race A, selection from race B). So we use `selection_id` only to recover the runner *name*, then deterministically exact-re-scan the pool for that name — keeping market+selection consistent and returning one slip per race (capped at `MAX_RACING_MATCHES`), exactly like the exact path's multi-match handling. The chosen market's type (WIN vs ANTEPOST_WIN) comes from whichever pool it was in. WIN always wins ties — a horse with a race today resolves to WIN (found in the unscoped full scan) and the ante-post fetch never happens. No race/festival named → the normal "which meeting?" clarification instead.
+
+**Place markets — top 2/3/4.** A race has one standard `PLACE` market ("To Be Placed", `numberOfWinners` set by field size — usually 2–3) plus `OTHER_PLACE` alternates named "2 TBP"/"4 TBP". They differ only by `numberOfWinners`, which is **only on `listMarketBook`, not the catalogue**. The parser captures a requested count in `ParsedBet.places` ("top 4" → `places=4`; plain "to place" → `places=None`). The main scan stays on `PLACE` (one market per race, so tiering is unchanged); then `_select_place_market` fetches that race's `PLACE`+`OTHER_PLACE` markets (`list_place_markets_for_event`) and their `numberOfWinners` (`get_market_winners`), and picks the market paying `places` — or the standard `PLACE` market when `places` is None (preferring market type `PLACE` on a tie). If the requested count isn't offered, it raises `RacingClarificationError`. The chosen market's places-paid is surfaced on `PreparedSlip.places`.
+
+## Known stale tests
+
+`test_confirmation_gate.py` and `test_event_selection.py` predate the clarification-response refactor (they mock `interpret` returning a bare `ParsedBet`, and `select_top_events` returning plain event-id strings instead of `{event_id, market_type}` dicts) — 24 tests fail on `main` for this reason, unrelated to newer work.
 
 ## Betfair API quirks
 
