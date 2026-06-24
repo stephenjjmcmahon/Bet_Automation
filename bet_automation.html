@@ -213,7 +213,7 @@ input,textarea,select{font:inherit;color:inherit}
       <div class="panel">
         <div class="panel-header">
           <i data-lucide="message-square" style="width:16px;height:16px;color:var(--color-text-muted)"></i>
-          <div><div class="panel-title">Place a Bet</div><div class="panel-subtitle">Type your bet in plain English — Cmd+Enter to parse</div></div>
+          <div><div class="panel-title">Place a Bet or Search</div><div class="panel-subtitle">Place a bet or explore markets in plain English — Cmd+Enter</div></div>
         </div>
         <div class="panel-body">
           <textarea class="bet-input" id="bet-input" placeholder="e.g. Chelsea to win £50 at 2.4" rows="3" aria-label="Enter your bet"></textarea>
@@ -222,6 +222,8 @@ input,textarea,select{font:inherit;color:inherit}
             <span class="hint-chip" onclick="fillExample(this)">Chelsea 50 at 2.4</span>
             <span class="hint-chip" onclick="fillExample(this)">Back Man United £25 at 3.5</span>
             <span class="hint-chip" onclick="fillExample(this)">Lay Arsenal 100 at 4.0</span>
+            <span class="hint-chip" onclick="fillExample(this)">Show me the World Cup markets today</span>
+            <span class="hint-chip" onclick="fillExample(this)">Over/under lines in tonight's games</span>
           </div>
           <button class="btn-parse" id="parse-btn" onclick="parseBet()">
             <i data-lucide="zap" style="width:16px;height:16px"></i>
@@ -229,6 +231,7 @@ input,textarea,select{font:inherit;color:inherit}
           </button>
           <div id="parse-error"></div>
           <div id="clarify-area"></div>
+          <div id="results-area"></div>
         </div>
       </div>
       <div class="panel">
@@ -248,6 +251,37 @@ input,textarea,select{font:inherit;color:inherit}
     </aside>
   </main>
 </div>
+<style>
+.sr-reply{display:flex;gap:var(--space-2);align-items:flex-start;background:var(--color-primary-highlight);border-radius:var(--radius-lg);padding:var(--space-3) var(--space-4);font-size:var(--text-sm);color:var(--color-text);margin-top:var(--space-3);line-height:1.6}
+.sr-event{background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);margin-top:var(--space-3);overflow:hidden}
+.sr-event-head{display:flex;justify-content:space-between;align-items:center;padding:var(--space-3) var(--space-4);cursor:pointer;border-bottom:1px solid var(--color-border);transition:background var(--transition-interactive)}
+.sr-event-head:hover{background:var(--color-surface-2)}
+.sr-event-header{padding:var(--space-3) var(--space-4) 0}
+.sr-event-name{font-size:var(--text-base);font-weight:600;color:var(--color-text)}
+.sr-event-meta{font-size:var(--text-xs);color:var(--color-text-muted);margin-top:2px}
+.sr-event-more{display:flex;align-items:center;gap:4px;font-size:var(--text-xs);color:var(--color-primary);white-space:nowrap}
+.sr-comp-label{font-size:var(--text-xs);font-weight:600;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:.04em;margin:var(--space-4) 0 var(--space-1)}
+.sr-market{padding:0 var(--space-4) var(--space-2)}
+.sr-market-label{font-size:var(--text-xs);color:var(--color-text-faint);text-transform:uppercase;letter-spacing:.04em;margin:var(--space-3) 0 var(--space-1)}
+.sr-row{display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2) 0;border-top:1px solid var(--color-border);flex-wrap:wrap}
+.sr-runner{flex:1;font-size:var(--text-sm);color:var(--color-text);min-width:0}
+.sr-price{text-align:center;background:var(--color-primary-highlight);border-radius:var(--radius-md);padding:2px var(--space-2);min-width:48px}
+.sr-odds{font-size:var(--text-sm);font-weight:600;color:var(--color-primary);font-family:var(--font-mono)}
+.sr-size{font-size:10px;color:var(--color-primary)}
+.sr-stake{display:flex;align-items:center;border:1px solid var(--color-border);border-radius:var(--radius-md);padding:0 6px;background:var(--color-surface-2)}
+.sr-stake-sym{font-size:var(--text-xs);color:var(--color-text-faint)}
+.sr-stake-input{width:44px;border:none;background:transparent;padding:4px 2px;font-family:var(--font-mono);font-size:var(--text-sm);color:var(--color-text)}
+.sr-add{display:flex;align-items:center;gap:3px;font-size:var(--text-xs);font-weight:600;color:var(--color-text-inverse);background:var(--color-primary);border-radius:var(--radius-md);padding:5px var(--space-2);white-space:nowrap}
+.sr-back{display:inline-flex;align-items:center;gap:4px;font-size:var(--text-sm);color:var(--color-text-muted);margin-top:var(--space-3)}
+.sr-more{background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);margin-top:var(--space-2);padding:0 var(--space-4)}
+.sr-more-head{display:flex;justify-content:space-between;align-items:center;padding:var(--space-3) 0;cursor:pointer;font-size:var(--text-sm);color:var(--color-text)}
+.sr-more-cta{display:flex;align-items:center;gap:4px;font-size:var(--text-xs);color:var(--color-primary)}
+.sr-note{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--color-text-faint);margin-top:var(--space-3)}
+.sr-err{flex-basis:100%;font-size:var(--text-xs);color:var(--color-error)}
+.sr-empty{font-size:var(--text-sm);color:var(--color-text-muted);padding:var(--space-2) 0}
+.sr-hidden{display:none}
+.sr-more-toggle{font-size:var(--text-xs);font-weight:600;color:var(--color-primary);padding:var(--space-2) 0 var(--space-1);cursor:pointer;background:none;border:none}
+</style>
 <script>
 const API = '';
 let betHistory = [];
@@ -255,6 +289,10 @@ let current = null;
 let slipQueue = [];
 let pendingParsed = null;
 let selectedFixture = null;
+let lastSearch = null;      // {reply, cards} — last search results, for "back to results"
+let betRows = {};           // rowId -> bettable row data for add-to-slip
+let betRowSeq = 0;
+let srBlockSeq = 0;         // unique id per market block, for show-more toggles
 
 (function() {
   const t = document.querySelector('[data-theme-toggle]'), r = document.documentElement;
@@ -375,6 +413,320 @@ async function handlePrepareResponse(res, fallbackInput) {
   return true;
 }
 
+// ── Query (bet or search, auto-routed) ─────────────────────────────────────────
+
+async function callQuery(userInput) {
+  return apiFetch(API + '/api/query', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_input: userInput })
+  });
+}
+
+async function handleQueryResponse(res, fallbackInput) {
+  if (res.status === 422) {
+    const e = await res.json().catch(() => ({}));
+    const detail = e.detail || {};
+    if (detail.status === 'clarification_needed') {
+      pendingParsed = detail.parsed_bet;
+      const missing = detail.missing_fields || [];
+      const needsFixture = missing.includes('stake') && detail.parsed_bet?.selection_name;
+      if (needsFixture) renderFixturePicker(detail.parsed_bet, detail.clarification_question);
+      else renderGenericClarify(detail.clarification_question, fallbackInput);
+      return false;
+    }
+    throw new Error(detail.detail || 'Validation error.');
+  }
+  if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || 'Something went wrong.'); }
+  const data = await res.json();
+  if (data.intent === 'search') {
+    document.getElementById('clarify-area').innerHTML = '';
+    lastSearch = { reply: data.reply, cards: data.cards || [], events: data.events || [], search_id: data.search_id };
+    renderSearchResults(data.reply, data.cards || [], data.events || [], data.search_id);
+    return true;
+  }
+  const slips = data.slips || [];
+  document.getElementById('results-area').innerHTML = '';
+  if (!slips.length) throw new Error('No matching event found on Betfair.');
+  slipQueue = slips.slice(1);
+  current = slips[0];
+  document.getElementById('clarify-area').innerHTML = '';
+  renderSlip(current);
+  return true;
+}
+
+// ── Search results rendering ───────────────────────────────────────────────────
+
+function fmtOdds(p) { return (p == null) ? '—' : Number(p).toFixed(2); }
+function fmtSize(s) { if (s == null) return ''; return s >= 1000 ? '£' + (s / 1000).toFixed(1) + 'k' : '£' + Math.round(s); }
+function esc(t) { return (t == null ? '' : String(t)).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+// Light markdown for the agent reply: bold, bullets, and line breaks rendered
+// cleanly instead of showing raw ** and - characters.
+function mdLite(t) {
+  return esc(t || '').trim()
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/__([^_]+)__/g, '<strong>$1</strong>')
+    .replace(/(^|\n)\s*[-*]\s+/g, '$1• ')
+    .replace(/\n/g, '<br>');
+}
+
+// Turn a Betfair market-type code (e.g. OVER_UNDER_25) into a readable label when
+// no human market name is available.
+function prettyType(s) {
+  if (!s) return 'Market';
+  return String(s).toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function registerRow(row) { const id = 'r' + (betRowSeq++); betRows[id] = row; return id; }
+
+function rowHtml(row) {
+  const id = registerRow(row);
+  const label = esc((row.runner_name || 'Selection') + (row.handicap ? ' ' + row.handicap : ''));
+  return `<div class="sr-row">
+    <span class="sr-runner">${label}</span>
+    <div class="sr-price"><div class="sr-odds">${fmtOdds(row.price)}</div><div class="sr-size">${fmtSize(row.size)}</div></div>
+    <div class="sr-stake"><span class="sr-stake-sym">£</span><input id="stake-${id}" class="sr-stake-input" type="number" min="0.01" step="0.01" value="10" aria-label="Stake on ${label}"></div>
+    <button class="sr-add" onclick="addToSlip('${id}')"><i data-lucide="plus" style="width:13px;height:13px"></i>Add</button>
+  </div>`;
+}
+
+const RUNNER_LIMIT = 8;     // runners shown per market before "show more"
+
+function marketBlockHtml(label, rows) {
+  if (!rows.length) return '';
+  const visible = rows.slice(0, RUNNER_LIMIT).map(rowHtml).join('');
+  let extra = '';
+  if (rows.length > RUNNER_LIMIT) {
+    const id = 'mb' + (srBlockSeq++);
+    const n = rows.length - RUNNER_LIMIT;
+    const hidden = rows.slice(RUNNER_LIMIT).map(rowHtml).join('');
+    extra = `<div id="${id}-more" class="sr-hidden">${hidden}</div>` +
+      `<button class="sr-more-toggle" id="${id}-btn" onclick="toggleMore('${id}', ${n})">Show ${n} more</button>`;
+  }
+  return `<div class="sr-market"><div class="sr-market-label">${esc(label || 'Market')}</div>${visible}${extra}</div>`;
+}
+
+function toggleMore(id, n) {
+  const more = document.getElementById(id + '-more');
+  const btn = document.getElementById(id + '-btn');
+  if (!more || !btn) return;
+  const collapsed = more.classList.toggle('sr-hidden');
+  btn.textContent = collapsed ? ('Show ' + n + ' more') : 'Show less';
+}
+
+function normRow(m, r) {
+  return {
+    event_id: m.event_id, event_name: m.event_name, competition: m.competition,
+    market_start_time: m.market_start_time, market_id: m.market_id,
+    market_type: m.market_type, market_name: m.market_name,
+    selection_id: r.selection_id, runner_name: r.runner_name, handicap: r.handicap,
+    side: 'BACK', price: r.back_price, size: r.back_size,
+  };
+}
+
+function renderSearchResults(reply, cards, navEvents, searchId) {
+  betRows = {}; betRowSeq = 0; srBlockSeq = 0;
+  cards = cards || []; navEvents = navEvents || [];
+  const area = document.getElementById('results-area');
+
+  // Group priced market cards by event, then by market.
+  const groups = []; const gIdx = {};
+  cards.forEach(c => {
+    if (!(c.event_id in gIdx)) { gIdx[c.event_id] = groups.length; groups.push({ meta: c, markets: {}, order: [] }); }
+    const ev = groups[gIdx[c.event_id]];
+    if (!(c.market_id in ev.markets)) { ev.markets[c.market_id] = { label: c.market_name || prettyType(c.market_type), rows: [] }; ev.order.push(c.market_id); }
+    ev.markets[c.market_id].rows.push(c);
+  });
+
+  let html = `<button class="sr-back" onclick="resetSearch()"><i data-lucide="rotate-ccw" style="width:14px;height:14px"></i>New search</button>`;
+  html += `<div class="sr-reply"><i data-lucide="sparkles" style="width:16px;height:16px;flex-shrink:0"></i><span>${mdLite(reply || '')}</span></div>`;
+  // The reply carries the answer (incl. "nothing on"); only add a fallback banner
+  // when there are no markets, no events, AND no reply text.
+  if (!groups.length && !navEvents.length && !(reply && reply.trim())) {
+    html += `<div class="banner banner-info" style="margin-top:var(--space-3)"><span>No results to show — try a different or narrower query.</span></div>`;
+  }
+
+  // Navigable events (no prices) — grouped by competition. Used for broad queries
+  // so nothing is priced until the user clicks into an event.
+  if (navEvents.length) {
+    const comps = []; const cIdx = {};
+    navEvents.forEach(e => {
+      const key = e.competition || '';
+      if (!(key in cIdx)) { cIdx[key] = comps.length; comps.push({ name: key, items: [] }); }
+      comps[cIdx[key]].items.push(e);
+    });
+    comps.forEach(comp => {
+      if (comp.name) html += `<div class="sr-comp-label">${esc(comp.name)}</div>`;
+      comp.items.forEach(e => {
+        const time = e.open_date ? formatEventTime(e.open_date) : '';
+        html += `<div class="sr-event"><div class="sr-event-head" onclick="loadEvent('${e.event_id}')" role="button" tabindex="0">
+          <div><div class="sr-event-name">${esc(e.name || '—')}</div><div class="sr-event-meta">${time}</div></div>
+          <span class="sr-event-more">View markets <i data-lucide="chevron-right" style="width:14px;height:14px"></i></span>
+        </div></div>`;
+      });
+    });
+  }
+
+  // Priced market groups.
+  groups.forEach(ev => {
+    const m = ev.meta;
+    const time = m.market_start_time ? formatEventTime(m.market_start_time) : '';
+    const blocks = ev.order.map(mid => marketBlockHtml(ev.markets[mid].label, ev.markets[mid].rows)).join('');
+    html += `<div class="sr-event">
+      <div class="sr-event-head" onclick="loadEvent('${m.event_id}')" role="button" tabindex="0">
+        <div><div class="sr-event-name">${esc(m.event_name || '—')}</div><div class="sr-event-meta">${esc(m.competition ? m.competition + ' · ' : '')}${time}</div></div>
+        <span class="sr-event-more">More markets <i data-lucide="chevron-right" style="width:14px;height:14px"></i></span>
+      </div>${blocks}
+    </div>`;
+  });
+
+  // Thumbs up/down on the search itself — logged to the `searches` row as 1/0.
+  if (searchId != null) {
+    html += `<div class="feedback-bar" id="search-feedback-bar" style="border-top:1px solid var(--color-divider);margin-top:var(--space-3)">
+      <span class="feedback-label">Were these results helpful?</span>
+      <div class="feedback-btns">
+        <button class="fb-btn" id="sfb-up" onclick="onSearchThumb(${searchId}, true)" title="Helpful" aria-label="Helpful">&#128077;</button>
+        <button class="fb-btn" id="sfb-down" onclick="onSearchThumb(${searchId}, false)" title="Not helpful" aria-label="Not helpful">&#128078;</button>
+      </div>
+    </div>`;
+  }
+
+  area.innerHTML = html;
+  lucide.createIcons();
+}
+
+async function onSearchThumb(searchId, correct) {
+  const up = document.getElementById('sfb-up'), down = document.getElementById('sfb-down');
+  if (up) up.classList.toggle('active-up', correct);
+  if (down) down.classList.toggle('active-down', !correct);
+  const label = document.querySelector('#search-feedback-bar .feedback-label');
+  if (label) label.textContent = 'Thanks for the feedback!';
+  try {
+    await apiFetch(API + '/api/search/feedback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ search_id: searchId, correct })
+    });
+  } catch (e) {}
+}
+
+// ── Event drill-through ─────────────────────────────────────────────────────────
+
+function backToResults() {
+  if (lastSearch) renderSearchResults(lastSearch.reply, lastSearch.cards, lastSearch.events, lastSearch.search_id);
+  else document.getElementById('results-area').innerHTML = '';
+}
+
+// Clears the server-side conversational search history so the next query starts a
+// fresh thread, then wipes the results and input. The UI clears even if the reset
+// call fails, so the button always feels responsive.
+async function resetSearch() {
+  try {
+    await apiFetch(API + '/api/search/reset', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  } catch (e) {
+    if (e.message === 'session_expired') return;
+  }
+  lastSearch = null;
+  document.getElementById('results-area').innerHTML = '';
+  const input = document.getElementById('bet-input');
+  if (input) { input.value = ''; input.focus(); }
+}
+
+async function loadEvent(eventId) {
+  const area = document.getElementById('results-area');
+  area.innerHTML = `<div class="sr-reply"><span class="spinner"></span><span>Loading markets…</span></div>`;
+  try {
+    const res = await apiFetch(API + '/api/event/' + eventId + '/markets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || 'Could not load event.'); }
+    renderEventView(await res.json());
+  } catch (e) {
+    if (e.message === 'session_expired') return;
+    area.innerHTML = `<button class="sr-back" onclick="backToResults()"><i data-lucide="arrow-left" style="width:14px;height:14px"></i>Back to results</button><div class="banner banner-error" style="margin-top:var(--space-2)"><span>${esc(e.message)}</span></div>`;
+    lucide.createIcons();
+  }
+}
+
+function renderEventView(ev) {
+  betRows = {}; betRowSeq = 0; srBlockSeq = 0;
+  const area = document.getElementById('results-area');
+  const time = ev.market_start_time ? formatEventTime(ev.market_start_time) : '';
+  let html = `<button class="sr-back" onclick="backToResults()"><i data-lucide="arrow-left" style="width:14px;height:14px"></i>Back to results</button>
+    <div class="sr-event" style="padding-bottom:var(--space-2)">
+    <div class="sr-event-header"><div class="sr-event-name">${esc(ev.event_name || '—')}</div><div class="sr-event-meta">${esc(ev.competition ? ev.competition + ' · ' : '')}${time}</div></div>`;
+  (ev.priced || []).forEach(m => {
+    const rows = (m.runners || []).filter(r => r.back_price != null).map(r => normRow(m, r));
+    html += marketBlockHtml(m.market_name || prettyType(m.market_type), rows);
+  });
+  (ev.more || []).forEach(mm => {
+    html += `<div class="sr-more" id="more-${esc(mm.market_id)}">
+      <div class="sr-more-head" onclick="expandMarket('${ev.event_id}','${esc(mm.market_id)}')" role="button" tabindex="0">
+        <span>${esc(mm.market_name || prettyType(mm.market_type))}</span>
+        <span class="sr-more-cta">Show prices <i data-lucide="chevron-down" style="width:14px;height:14px"></i></span>
+      </div>
+    </div>`;
+  });
+  html += `<div class="sr-note" style="padding:0 var(--space-4) var(--space-3)"><i data-lucide="info" style="width:13px;height:13px"></i>Headline markets priced now · others load when opened</div></div>`;
+  area.innerHTML = html;
+  lucide.createIcons();
+}
+
+async function expandMarket(eventId, marketId) {
+  const wrap = document.getElementById('more-' + marketId);
+  if (!wrap) return;
+  const cta = wrap.querySelector('.sr-more-cta');
+  if (cta) cta.innerHTML = '<span class="spinner"></span>';
+  try {
+    const res = await apiFetch(API + '/api/market/' + marketId + '/runners', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event_id: eventId }) });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || 'Could not load market.'); }
+    const m = await res.json();
+    const rows = (m.runners || []).filter(r => r.back_price != null).map(r => normRow(m, r));
+    const label = m.market_name || prettyType(m.market_type);
+    wrap.innerHTML = rows.length
+      ? marketBlockHtml(label, rows)
+      : `<div class="sr-market-label">${esc(label)}</div><div class="sr-empty">No prices available right now.</div>`;
+    lucide.createIcons();
+  } catch (e) {
+    if (e.message === 'session_expired') return;
+    if (cta) cta.textContent = 'Retry';
+  }
+}
+
+// ── Add a search selection to the bet slip ──────────────────────────────────────
+
+async function addToSlip(rowId) {
+  const row = betRows[rowId];
+  if (!row) return;
+  const stakeEl = document.getElementById('stake-' + rowId);
+  const stake = parseFloat(stakeEl ? stakeEl.value : 0) || 0;
+  const rowEl = stakeEl ? stakeEl.closest('.sr-row') : null;
+  const btn = rowEl ? rowEl.querySelector('.sr-add') : null;
+  if (stake <= 0) { if (stakeEl) stakeEl.focus(); return; }
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>'; }
+  if (rowEl) { const old = rowEl.querySelector('.sr-err'); if (old) old.remove(); }
+  try {
+    const res = await apiFetch(API + '/api/prepare-from-market', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        event_id: row.event_id, market_id: row.market_id, selection_id: row.selection_id,
+        side: row.side || 'BACK', stake, line: (row.handicap || null),
+        runner_name: row.runner_name, event_name: row.event_name, competition: row.competition,
+        market_type: row.market_type, event_start_time: row.market_start_time,
+      })
+    });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || 'Could not add to slip.'); }
+    const slip = await res.json();
+    current = slip; slipQueue = [];
+    renderSlip(slip);
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i data-lucide="check" style="width:13px;height:13px"></i>Added'; lucide.createIcons(); }
+    document.getElementById('betslip-panel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } catch (e) {
+    if (e.message === 'session_expired') return;
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i data-lucide="plus" style="width:13px;height:13px"></i>Add'; lucide.createIcons(); }
+    if (rowEl) { const msg = document.createElement('div'); msg.className = 'sr-err'; msg.textContent = e.message; rowEl.appendChild(msg); }
+  }
+}
+
 async function parseBet() {
   const input = document.getElementById('bet-input').value.trim();
   if (!input) return;
@@ -382,10 +734,11 @@ async function parseBet() {
   btn.disabled = true; btnTxt.textContent = 'Preparing…';
   const ic = btn.querySelector('[data-lucide]'); if (ic) ic.outerHTML = '<span class="spinner"></span>';
   errEl.innerHTML = ''; document.getElementById('clarify-area').innerHTML = '';
+  document.getElementById('results-area').innerHTML = '';
   selectedFixture = null; pendingParsed = null;
   try {
-    const res = await callPrepare(input);
-    await handlePrepareResponse(res, input);
+    const res = await callQuery(input);
+    await handleQueryResponse(res, input);
   } catch(e) {
     if (e.message !== 'session_expired') {
       errEl.innerHTML = `<div class="banner banner-error" style="margin-top:var(--space-3)"><i data-lucide="alert-circle" class="banner-icon" style="width:16px;height:16px"></i><span>${e.message}</span></div>`;

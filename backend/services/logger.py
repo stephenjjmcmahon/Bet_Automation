@@ -43,6 +43,28 @@ _CREATE_FAILURES = """
     )
 """
 
+# One row per natural-language search query run through SearchAgent — separate
+# from bets/failures because a search is browsing, not a bet (a search that the
+# user later turns into a slip lands in `bets` via prepare-from-market, unlinked).
+# Booleans are stored as INTEGER 0/1. llm_latency_ms is the summed time inside
+# llm.complete(); the rest of total_latency_ms is Betfair calls + overhead.
+_CREATE_SEARCHES = """
+    CREATE TABLE IF NOT EXISTS searches (
+        id                INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp         TEXT NOT NULL,
+        query             TEXT NOT NULL,
+        rounds            INTEGER NOT NULL,   -- tool-calling rounds used (vs MAX_TOOL_ROUNDS)
+        hit_round_cap     INTEGER NOT NULL,   -- 1 if it ran out of rounds without present_results
+        price_calls       INTEGER NOT NULL,   -- price_markets calls made (vs MAX_PRICE_CALLS)
+        total_latency_ms  INTEGER NOT NULL,   -- whole SearchAgent.run wall time
+        llm_latency_ms    INTEGER NOT NULL,   -- summed time inside llm.complete()
+        cards             INTEGER NOT NULL,   -- bettable cards returned
+        events            INTEGER NOT NULL,   -- navigable events returned
+        salvaged          INTEGER NOT NULL,   -- 1 if it never called present_results (rescued on exit)
+        feedback          INTEGER             -- user rating: NULL = not rated, 1 = thumbs up, 0 = thumbs down
+    )
+"""
+
 
 def _get_conn():
     # Creates the logs/ directory and both tables if they don't already exist,
@@ -52,6 +74,12 @@ def _get_conn():
     conn.execute("PRAGMA journal_mode=WAL")  # better concurrent read performance
     conn.execute(_CREATE_BETS)
     conn.execute(_CREATE_FAILURES)
+    conn.execute(_CREATE_SEARCHES)
+    # Migration: add `feedback` to pre-existing `searches` tables, since
+    # CREATE TABLE IF NOT EXISTS won't add a column to a table that's already there.
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(searches)").fetchall()]
+    if "feedback" not in cols:
+        conn.execute("ALTER TABLE searches ADD COLUMN feedback INTEGER")
     return conn
 
 
@@ -132,6 +160,53 @@ def log_failure(
         conn.execute(
             "INSERT INTO failures (timestamp, reason, selection_name, stake, market_id, event_id) VALUES (?, ?, ?, ?, ?, ?)",
             (timestamp, reason, selection_name, stake, market_id, event_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def log_search(
+    query: str,
+    rounds: int,
+    hit_round_cap: bool,
+    price_calls: int,
+    total_latency_ms: int,
+    llm_latency_ms: int,
+    cards: int,
+    events: int,
+    salvaged: bool,
+) -> int:
+    # INSERT one row per search query — booleans coerced to 0/1. Returns the new
+    # row's id so the frontend can attach a thumbs up/down rating to it later.
+    timestamp = datetime.now(timezone.utc).isoformat()
+    conn = _get_conn()
+    try:
+        cur = conn.execute(
+            """
+            INSERT INTO searches (
+                timestamp, query, rounds, hit_round_cap, price_calls,
+                total_latency_ms, llm_latency_ms, cards, events, salvaged
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                timestamp, query, rounds, int(hit_round_cap), price_calls,
+                total_latency_ms, llm_latency_ms, cards, events, int(salvaged),
+            ),
+        )
+        conn.commit()
+        return cur.lastrowid
+    finally:
+        conn.close()
+
+
+def log_search_feedback(search_id: int, correct: bool) -> None:
+    # UPDATE the existing search row with the user's rating (1 = up, 0 = down).
+    conn = _get_conn()
+    try:
+        conn.execute(
+            "UPDATE searches SET feedback=? WHERE id=?",
+            (int(correct), search_id),
         )
         conn.commit()
     finally:
