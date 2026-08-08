@@ -6,6 +6,15 @@ load_dotenv()
 
 BETFAIR_LOGIN_URL = "https://identitysso.betfair.com/api/login"
 
+# KNOWN LIMITATION — the Betfair session token is stored in the user's cookie via
+# Starlette's SessionMiddleware, which *signs* the cookie but does not *encrypt* it.
+# The token is therefore base64-readable by anyone who can read the cookie (local
+# browser storage, or a network observer if the app is ever served over plain HTTP).
+# Signing stops tampering, not disclosure.
+#
+# The proper fix is server-side session storage, keeping only an opaque session id
+# in the cookie. That's deliberately out of scope for a single-process local app;
+# it is documented in the README's security notes rather than silently accepted.
 _SESSION_KEY = "betfair_token"
 
 

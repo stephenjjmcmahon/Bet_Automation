@@ -182,6 +182,80 @@ def list_racing_markets(event_type_id: str, market_type: str, session: dict) -> 
     return betfair_post("listMarketCatalogue/", payload, session)
 
 
+# Outright / competition-level market types across every sport (see docs/Market_Types.md).
+# For ALL of these the EVENT is a competition ("FIFA World Cup", "The Open") — not a
+# single fixture — and the team/player is a RUNNER, so textQuery can't find them; we
+# bulk-fetch and scan runners (the racing pattern, see list_racing_markets /
+# racing_service._scan_for_runner). This is the BROAD set: tournament winners plus
+# the adjacent competition markets where the participant is also a runner — placings
+# (top-5/10/20, make the cut), group stage, qualification/progression, top
+# nationality/region, scorer & player awards, and tournament head-to-head match
+# bets. Per-FIXTURE types (MATCH_ODDS, OVER_UNDER*, CORRECT_SCORE, HANDICAP, …) are
+# deliberately EXCLUDED: a participant's own matches are already covered by the
+# find_events fixture path, and those types dwarf the outrights by volume (so they
+# would crowd the real outrights out of any liquidity-capped fetch).
+OUTRIGHT_MARKET_TYPES = [
+    # tournament / competition winners
+    "WINNER", "OUTRIGHT_WINNER", "TOURNAMENT_WINNER", "SERIES_WINNER",
+    "CHAMPIONSHIP_WINNER", "CONSTRUCTORS_WINNER", "SUPER_BOWL_WINNER",
+    "FIRST_WINNER", "WINNING_REGION", "NAME_THE_FINALISTS",
+    # progression / elimination / qualification
+    "TO_REACH_FINAL", "TO_REACH_SEMIS", "TO_REACH_QUARTERS", "TO_REACH_ROUND_16",
+    "TO_QUALIFY", "STAGE_OF_ELIMINATION",
+    # group-stage outrights
+    "GROUP_A_WINNER", "GROUP_B_WINNER", "GROUP_C_WINNER", "GROUP_D_WINNER",
+    "GROUP_E_WINNER", "GROUP_F_WINNER", "GROUP_G_WINNER", "GROUP_H_WINNER",
+    "GROUP_I_WINNER", "GROUP_J_WINNER", "GROUP_K_WINNER", "GROUP_L_WINNER",
+    "GROUP_A_WINNER_SGX",
+    "GROUP_A_TO_QUALIFY", "GROUP_B_TO_QUALIFY", "GROUP_C_TO_QUALIFY",
+    "GROUP_D_TO_QUALIFY", "GROUP_E_TO_QUALIFY", "GROUP_F_TO_QUALIFY",
+    "GROUP_G_TO_QUALIFY", "GROUP_H_TO_QUALIFY", "GROUP_I_TO_QUALIFY",
+    "GROUP_J_TO_QUALIFY", "GROUP_K_TO_QUALIFY", "GROUP_L_TO_QUALIFY",
+    # placings / finishing position (golf especially; league top-N)
+    "TOP_N_FINISH", "TOP_5_FINISH", "TOP_8_FINISH", "TOP_10_FINISH",
+    "TOP_20_FINISH", "MAKE_THE_CUT", "EACH_WAY", "ROUND_LEADER",
+    "TOP_4", "TOP_6", "TOP_10",
+    # top nationality / region / category
+    "TOP_NATIONALITY", "TOP_ENGLISH_PLAYER", "TOP_IRISH_PLAYER", "TOP_EUROPEAN",
+    "TOP_CONTINENTAL", "TOP_USA", "TOP_ASIAN",
+    "TOP_EURO_TEAM", "TOP_CONCACAF_TEAM", "TOP_CONMEBOL_TEAM", "TOP_AFC_TEAM",
+    "TOP_CAF_TEAM",
+    # awards / scorers
+    "GOLDEN_BOOT", "WINNER_GOLDEN_BOOT", "GOLDEN_GLOVE", "TOP_GOALSCORER",
+    "TOP_SCORING_CLUB", "YOUNG_PLAYER",
+    # tournament head-to-head match bets
+    "MATCH_BET", "TOUR_MATCHBET_NTIE1",
+]
+
+
+def list_outright_markets(event_type_id: str, session: dict, max_results: int = 500) -> list:
+    """All upcoming outright / competition-level markets for a sport in one call.
+
+    Fetches every market whose type is in OUTRIGHT_MARKET_TYPES — the markets where
+    a team/player is a RUNNER rather than named in the event ("England" in "FIFA
+    World Cup", "Scottie Scheffler" in "The Open") — so the search agent can surface
+    "X to win / place / reach the final / …" by scanning runners, the same way
+    racing finds a horse without knowing the meeting. These types are individually
+    rare, so even the broad allowlist returns a small pool. No marketStartTime
+    filter: an in-progress tournament's winner market has a past start time but is
+    still open, and listMarketCatalogue already omits settled/closed markets.
+    Liquidity-ranked so the busiest competitions (World Cup, the majors) come first.
+    """
+    payload = {
+        "filter": {
+            "eventTypeIds": [event_type_id],
+            "marketTypeCodes": OUTRIGHT_MARKET_TYPES,
+        },
+        "maxResults": str(max_results),
+        "marketProjection": [
+            "RUNNER_DESCRIPTION", "EVENT", "COMPETITION",
+            "MARKET_START_TIME", "MARKET_DESCRIPTION",
+        ],
+        "sort": "MAXIMUM_TRADED",
+    }
+    return betfair_post("listMarketCatalogue/", payload, session)
+
+
 def list_place_markets_for_event(event_id: str, session: dict) -> list:
     """All place markets for one race meeting: the standard PLACE ('To Be Placed')
     plus the OTHER_PLACE alternates ('2 TBP', '4 TBP'). Includes MARKET_DESCRIPTION

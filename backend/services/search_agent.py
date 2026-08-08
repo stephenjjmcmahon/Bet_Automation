@@ -8,12 +8,15 @@ confirm path. Cards are reconstructed server-side from the agent's own
 price_markets output, so the agent can only surface real, priced selections.
 """
 import json
+import logging
 import re
 import time
 from datetime import datetime, timezone
 
 from backend.services.llm import get_llm
 from backend.services.search_tools import SearchTools
+
+log = logging.getLogger(__name__)
 
 # gpt-4o-mini: handles this tool-calling loop well, is cheaper, and has far more
 # token-per-minute headroom than gpt-4o (whose low-tier TPM a broad query — e.g. a
@@ -73,6 +76,35 @@ TOOL_DEFS = [
         },
     },
     {
+        "name": "find_outrights",
+        "description": (
+            "Find COMPETITION-LEVEL / outright markets in which a named team, club, "
+            "nation, or individual is a competitor — markets where they are a RUNNER "
+            "rather than named in the event. Covers not just 'X to win the "
+            "tournament' (WINNER/OUTRIGHT_WINNER) but the whole competition: to "
+            "finish top 5/10/20, make the cut, each-way, win their group, "
+            "qualify / reach the final, top nationality, golden boot / top "
+            "goalscorer, tournament match bets, etc. Use this WHENEVER the query "
+            "centres on a participant's name, IN ADDITION to find_events — which "
+            "only matches the participant in fixture NAMES ('England v France') and "
+            "CANNOT see these. Each returned row carries its market_type (e.g. "
+            "WINNER, TOP_10_FINISH, TO_REACH_FINAL) and the participant's "
+            "selection_id; PRESENT the rows that fit the query — for a bare name "
+            "show the winner(s) plus other notable markets, for a specific ask "
+            "('top 10 finish', 'to reach the final') show that market type. Pass "
+            "their market_ids (with the given selection_id) straight to "
+            "present_results, which prices them. Cheap, no prices."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "sport": {"type": "string", "description": "e.g. 'Football', 'Golf', 'Tennis', 'Cricket'."},
+                "name": {"type": "string", "description": "The team/club/nation/individual to find as a competitor, e.g. 'England', 'Scottie Scheffler', 'Arsenal'. Use the participant's name exactly — NOT a competition name."},
+            },
+            "required": ["sport", "name"],
+        },
+    },
+    {
         "name": "list_market_types",
         "description": (
             "List the market type codes available across the given events "
@@ -106,10 +138,14 @@ TOOL_DEFS = [
     {
         "name": "price_markets",
         "description": (
-            "Fetch live prices (best back/lay + size) for the given markets. This "
-            "is the only expensive call and is budget-capped to the most-traded "
-            "markets; if the result is truncated, tell the user to narrow the "
-            "query. Pass market_ids you obtained from list_markets."
+            "Fetch live prices (best back/lay + size) BEFORE presenting. Needed "
+            "ONLY when the query filters or ranks by PRICE (e.g. 'odds better than "
+            "2.0', 'shortest favourites', 'best value') and you must see prices to "
+            "decide which markets/runners to show. For normal display you do NOT "
+            "need this — present_results prices whatever markets you include "
+            "automatically. The only expensive call; budget-capped to the most-"
+            "traded markets; if the result is truncated, tell the user to narrow "
+            "the query. Pass market_ids you obtained from list_markets."
         ),
         "parameters": {
             "type": "object",
@@ -124,11 +160,12 @@ TOOL_DEFS = [
 PRESENT_TOOL = {
     "name": "present_results",
     "description": (
-        "Present the final answer. Provide a short reply plus EITHER priced "
-        "markets (for small, specific sets) OR a navigable list of events (for "
-        "broad 'what's on' sets — the user clicks an event to see its markets). "
-        "Only include market_ids you priced via price_markets, and event_ids you "
-        "got from find_events."
+        "Present the final answer. Provide a short reply plus EITHER markets (for "
+        "small, specific sets) OR a navigable list of events (for broad 'what's "
+        "on' sets — the user clicks an event to see its markets). The markets you "
+        "include are priced AUTOMATICALLY here, so you do NOT need to price them "
+        "first. Only include market_ids you got from list_markets, and event_ids "
+        "you got from find_events."
     ),
     "parameters": {
         "type": "object",
@@ -136,7 +173,7 @@ PRESENT_TOOL = {
             "reply": {"type": "string", "description": "Short natural-language answer. Note if results were truncated and suggest narrowing."},
             "markets": {
                 "type": "array",
-                "description": "Priced markets to show as bettable rows. Use for small, specific sets, or when the user wants odds.",
+                "description": "Markets to show as bettable rows (priced automatically on submit). Use for small, specific sets, or when the user wants odds.",
                 "items": {
                     "type": "object",
                     "properties": {
@@ -197,6 +234,41 @@ upcoming events are searched — do NOT default to today, or you will hide event
 days. When a time IS named, convert it to an ISO 8601 UTC window yourself: "this evening" \
 ≈ 17:00–23:00 local; treat local as UTC unless the query says otherwise.
 
+PARTICIPANTS (very important). When the query centres on a TEAM, CLUB, NATION, or \
+INDIVIDUAL — "England", "Scottie Scheffler", "Arsenal", "show me the odds for Argentina to \
+win the world cup" — the user usually wants BOTH that participant's upcoming fixtures AND the \
+competition-level markets where they are a competitor. Those competition markets list the \
+participant as a RUNNER and are named after the COMPETITION, never the participant, so \
+find_events/textQuery CANNOT see them. They are not just "to win the tournament" (WINNER) — \
+find_outrights also returns the participant in placings (top 5/10/20, make the cut, each-way), \
+group-stage and qualification/progression markets (win the group, to qualify, to reach the \
+final), top-nationality/region, golden boot / top goalscorer, and tournament match bets. So \
+for any participant query you MUST, in the SAME step, call BOTH: find_events(text=<participant>) \
+for their fixtures, AND find_outrights(sport, name=<participant>) for the competition markets. \
+Then present the fixtures (as events) together with the find_outrights rows (as markets, each \
+filtered to its given selection_id so the card shows just that participant). Each find_outrights \
+row carries its market_type, so present the ones that FIT the query: for a bare name show the \
+winner(s) plus other notable markets; for a specific ask ("top 10 finish", "to reach the \
+final", "to qualify") present that market type. Do NOT try to guess and search a competition \
+NAME to find a participant — find_outrights does that for you by scanning runners. For an \
+individual in a tournament sport (golf, tennis, darts, snooker) there is usually NO fixture \
+named after them, so find_outrights is the main or only useful call. Reserve a bare \
+find_events (no find_outrights) for queries that name no participant ("what football is on", \
+"tonight's over/under lines").
+
+Worked example — query "England": ROUND 1, call BOTH find_events(sport="Football", \
+text="England") and find_outrights(sport="Football", name="England") together. ROUND 2, go \
+STRAIGHT to present_results — do NOT write a prose summary and do NOT call list_markets first. \
+Put the participant's fixtures in `events` (navigable — the user clicks to see that match's \
+markets) and EVERY find_outrights row in `markets`, each with selection_ids set to that row's \
+selection_id (so each card shows just England). So present_results gets: reply="England play \
+France tonight — here's that match plus England's outright markets:"; events = the England v \
+France event_id; markets = the World Cup winner market_id (selection_ids = England's selection \
+id) and the Euros winner market_id (selection_ids = England's selection id). The same applies \
+to a lone individual ("Scottie Scheffler"): present each find_outrights row as a \
+selection-filtered market even when there are no fixtures. Finishing a participant query with \
+a text message instead of present_results is a FAILURE — the results never reach the user.
+
 The `country` arg of find_events filters by WHERE THE EVENT IS HELD (the host venue), \
 NOT by a participant's nationality. It is an ISO 3166-1 alpha-2 code (Australia → "AU", \
 UK → "GB", Ireland → "IE", USA → "US"). Use it ONLY when the user explicitly asks for \
@@ -218,13 +290,12 @@ NOT text="World Cup" (which returns EVERY fixture in the tournament, then you ca
 which are England's). Use a competition as `text` only when no team is named (e.g. an \
 outright "World Cup winner" query). If you ever do search broadly and get many fixtures, \
 do NOT present them all — present_results with only the events that actually match the \
-query (here, the ones with "England" in the name).
+query (here, the ones with "England" in the name). If there is no obvious team/competition in the query, leave `text` unset and return all events for the sport.
 
 Workflow:
-1. find_events to locate the events (give a sport; for `text` use the MOST SPECIFIC name — prefer a named team over a competition; add country ONLY for an explicit "in <place>" host-location query, NEVER from a team/nation name; add a time window ONLY when the query names a time).
-2. list_market_types and/or list_markets to see what's offered. Filter by market type when the query names one.
-3. price_markets on the focused set of markets that answer the query.
-4. present_results with a short reply and the markets to show.
+1. find_events to locate the events (give a sport; for `text` use the MOST SPECIFIC name — prefer a named team over a competition; add country ONLY for an explicit "in <place>" host-location query, NEVER from a team/nation name; add a time window ONLY when the query names a time). When the query names a participant, ALSO call find_outrights(sport, name) in this SAME step — it returns the win-the-tournament markets find_events cannot see.
+2. list_market_types and/or list_markets to see what fixture markets are offered. Filter by market type when the query names one. (find_outrights rows are already bettable markets — they do NOT need list_markets.)
+3. present_results with a short reply and the markets to show. Include the find_outrights rows as `markets` (each with its `selection_ids` set to the returned selection_id, so the card shows just that participant). The markets you include are priced AUTOMATICALLY on submit — you do NOT need to fetch prices first, so do NOT call price_markets just to display odds. (price_markets is ONLY for queries that filter or rank by price — see its description.)
 
 Market-type hints (Betfair codes): match result → MATCH_ODDS; both teams to score → \
 BOTH_TEAMS_TO_SCORE; football goals over/under → OVER_UNDER_05/15/25/35/45 (one market per line); \
@@ -247,11 +318,11 @@ list (the `events` argument); the user clicks one to see and price its markets. 
 odds/lines. When unsure because the set is large, prefer presenting events.
 
 Rules:
-- Only present markets you actually priced, and events you got from find_events. Never invent prices, runners, markets, or fixtures.
+- Only present markets you got from list_markets or find_outrights, and events you got from find_events. Never invent prices, runners, markets, or fixtures.
 - Put events/markets in the `events`/`markets` arguments — never enumerate them in the reply text. The reply is a one-line intro only (e.g. "Here are tomorrow's meetings:"), since the list renders below it.
 - You MUST end by calling present_results. Do NOT write a normal text message that lists markets, runners, or prices — that output is discarded. The ONLY way results reach the user is via the present_results arguments.
 - Answer truthfully from what the tools return: if find_events comes back empty, say there's nothing on — do not invent an event.
-- price_markets is budget-capped and may truncate; if `truncated` is true, say so in your reply and suggest a narrower query.
+- Pricing is budget-capped and may truncate. If you call price_markets (only for price-filter queries) and it returns `truncated`, say so in your reply and suggest a narrower query.
 - Keep the reply short (1–3 sentences). The markets themselves carry the detail.
 - Always finish by calling present_results (with markets, or with an empty list plus a helpful reply)."""
 
@@ -297,8 +368,7 @@ class SearchAgent:
             }
             return result
 
-        print(f"DEBUG SearchAgent.run: {user_input!r}  (history: {len(messages) - 1} prior turn(s))")
-        print()
+        log.info("SearchAgent.run: %r (history: %d prior turn(s))", user_input, len(messages) - 1)
 
         for round_no in range(1, MAX_TOOL_ROUNDS + 1):
             llm_t0 = time.monotonic()
@@ -309,15 +379,13 @@ class SearchAgent:
                 # Model answered in plain text without calling present_results.
                 # Surface structured results anyway (salvage) so the user gets
                 # bettable cards rather than a prose list.
-                print(f"DEBUG agent round {round_no}: no tool call — model replied in text, running salvage")
-                print()
+                log.info("agent round %d: no tool call — model replied in text, running salvage", round_no)
                 return _finish(
                     SearchAgent._result(resp.text or "", [], [], tools, priced_cache),
                     rounds=round_no, salvaged=True,
                 )
 
-            print(f"DEBUG agent round {round_no}: model chose {[tc.name for tc in resp.tool_calls]}")
-            print()
+            log.debug("agent round %d: model chose %s", round_no, [tc.name for tc in resp.tool_calls])
 
             messages.append({
                 "role": "assistant",
@@ -335,50 +403,72 @@ class SearchAgent:
                 # price cache, so compacting the model's view loses nothing.
                 if tc.name == "present_results":
                     present_args = a
-                    print(f"DEBUG agent → present_results: {len(a.get('markets') or [])} market(s), {len(a.get('events') or [])} event(s)")
-                    print()
+                    log.debug(
+                        "agent → present_results: %d market(s), %d event(s)",
+                        len(a.get("markets") or []), len(a.get("events") or []),
+                    )
                     content = {"status": "ok"}
                 elif tc.name == "price_markets":
                     price_calls += 1
                     ids = a.get("market_ids", [])
                     if price_calls > MAX_PRICE_CALLS:
-                        print(f"DEBUG agent → price_markets BLOCKED — budget used ({MAX_PRICE_CALLS} price calls)")
-                        print()
+                        log.warning(
+                            "agent → price_markets BLOCKED — budget used (%d price calls)",
+                            MAX_PRICE_CALLS,
+                        )
                         content = {"error": "pricing budget reached for this query — narrow it and try again"}
                     else:
-                        print(f"DEBUG agent → price_markets: pricing {len(ids)} market(s)")
+                        log.debug("agent → price_markets: pricing %d market(s)", len(ids))
                         full = tools.price_markets(ids)
                         for m in full["markets"]:
                             priced_cache[m["market_id"]] = m
-                        print(f"  DEBUG price_markets result: shown={full['shown']} total={full['total']} truncated={full['truncated']}")
-                        print()
+                        log.debug(
+                            "  price_markets result: shown=%s total=%s truncated=%s",
+                            full["shown"], full["total"], full["truncated"],
+                        )
                         content = SearchAgent._compact_priced(full)
                 elif tc.name == "list_markets":
                     eids, types = a.get("event_ids", []), a.get("market_types")
-                    print(f"DEBUG agent → list_markets: {len(eids)} event(s), types={types or 'ALL'}")
+                    log.debug("agent → list_markets: %d event(s), types=%s", len(eids), types or "ALL")
                     # Caches full data in `tools`; only the lean view goes to the model.
                     full = tools.list_markets(eids, types)
                     # Already liquidity-ranked upstream — cap the model's view to the
                     # most-traded so a broad all-types result can't stall the next round.
                     capped = full[:MAX_MARKETS_TO_MODEL]
                     note = "" if len(full) <= MAX_MARKETS_TO_MODEL else f" (showing top {MAX_MARKETS_TO_MODEL} by liquidity)"
-                    print(f"  DEBUG list_markets result: {len(full)} market(s){note}")
-                    print()
+                    log.debug("  list_markets result: %d market(s)%s", len(full), note)
                     content = SearchAgent._compact_markets(capped)
                 elif tc.name == "find_events":
-                    print(f"DEBUG agent → find_events: sport={a.get('sport')!r} text={a.get('text')!r} country={a.get('country')!r} from={a.get('time_from')} to={a.get('time_to')}")
+                    log.debug(
+                        "agent → find_events: sport=%r text=%r country=%r from=%s to=%s",
+                        a.get("sport"), a.get("text"), a.get("country"),
+                        a.get("time_from"), a.get("time_to"),
+                    )
                     content = SearchAgent._dispatch(tc, tools)
-                    print(f"  DEBUG find_events result: {len(content)} event(s)")
-                    for ev in content:
-                        comp = ev.get("competition")
-                        comp_str = f" [{comp}]" if comp else ""
-                        print(f"    • {ev.get('event_id')}  {ev.get('name')}{comp_str}  @ {ev.get('open_date')}")
-                    print()
+                    log.debug("  find_events result: %d event(s)", len(content))
+                    if log.isEnabledFor(logging.DEBUG):
+                        for ev in content:
+                            comp = ev.get("competition")
+                            log.debug(
+                                "    • %s  %s%s  @ %s",
+                                ev.get("event_id"), ev.get("name"),
+                                f" [{comp}]" if comp else "", ev.get("open_date"),
+                            )
+                elif tc.name == "find_outrights":
+                    log.debug("agent → find_outrights: sport=%r name=%r", a.get("sport"), a.get("name"))
+                    content = SearchAgent._dispatch(tc, tools)
+                    log.debug("  find_outrights result: %d market(s)", len(content))
+                    if log.isEnabledFor(logging.DEBUG):
+                        for mk in content:
+                            log.debug(
+                                "    • %s  %s — %s @ %s",
+                                mk.get("market_id"), mk.get("runner_name"),
+                                mk.get("market_name"), mk.get("event_name"),
+                            )
                 elif tc.name == "list_market_types":
-                    print(f"DEBUG agent → list_market_types: {len(a.get('event_ids', []))} event(s)")
+                    log.debug("agent → list_market_types: %d event(s)", len(a.get("event_ids", [])))
                     content = SearchAgent._dispatch(tc, tools)
-                    print(f"  DEBUG list_market_types result: {content}")
-                    print()
+                    log.debug("  list_market_types result: %s", content)
                 else:
                     content = SearchAgent._dispatch(tc, tools)
                 messages.append({
@@ -388,19 +478,20 @@ class SearchAgent:
                 })
 
             if present_args is not None:
-                # The model can call present_results with markets it never priced
-                # (skipping price_markets). Cards come only from our own priced data
-                # (integrity gate), so those would all be dropped and the result
-                # would wrongly fall back to navigable events. Price the presented-
-                # but-unpriced markets now (within budget) so they become real cards.
+                # NORMAL PATH (pricing fold): the model presents the markets it wants
+                # WITHOUT pricing them first — it's instructed that present_results
+                # prices them here. Cards come only from our own priced data (the
+                # integrity gate), so we price the presented-but-unpriced markets now,
+                # within budget, turning them into real cards. Any market the model
+                # DID price itself (only price-filter queries call price_markets) is
+                # already in priced_cache and skipped, so nothing is priced twice.
                 unpriced = [
                     m.get("market_id") for m in (present_args.get("markets") or [])
                     if m.get("market_id") and m.get("market_id") not in priced_cache
                 ]
                 if unpriced and price_calls < MAX_PRICE_CALLS:
                     price_calls += 1
-                    print(f"DEBUG present_results named {len(unpriced)} unpriced market(s) — pricing them now")
-                    print()
+                    log.debug("present_results named %d unpriced market(s) — pricing them now", len(unpriced))
                     full = tools.price_markets(unpriced)
                     for m in full["markets"]:
                         priced_cache[m["market_id"]] = m
@@ -415,8 +506,10 @@ class SearchAgent:
                     rounds=round_no, salvaged=False,
                 )
 
-        print(f"DEBUG agent: reached MAX_TOOL_ROUNDS ({MAX_TOOL_ROUNDS}) without present_results, running salvage")
-        print()
+        log.warning(
+            "agent reached MAX_TOOL_ROUNDS (%d) without present_results, running salvage",
+            MAX_TOOL_ROUNDS,
+        )
         # Empty reply: let _result pick the wording, so it only apologises when
         # salvage genuinely recovered nothing (not when it recovered cards).
         return _finish(
@@ -434,8 +527,7 @@ class SearchAgent:
           4. else if events were found -> offer them as a navigable list."""
         reply = SearchAgent._clamp_reply(reply)
         if cards or events:
-            print(f"DEBUG result: presenting {len(cards)} card(s), {len(events)} event(s)")
-            print()
+            log.info("Search presenting %d card(s), %d event(s)", len(cards), len(events))
             default = _SALVAGE_OK_REPLY if cards else _SALVAGE_EVENTS_REPLY
             return {"reply": reply or default, "cards": cards, "events": events}
 
@@ -443,28 +535,29 @@ class SearchAgent:
             synth = {"markets": [{"market_id": mid} for mid in priced_cache]}
             built = SearchAgent._build_cards(synth, priced_cache)
             if built:
-                print(f"DEBUG result salvage: nothing presented — building cards from {len(priced_cache)} already-priced market(s)")
-                print()
-                return {"reply": reply or _SALVAGE_OK_REPLY, "cards": built, "events": []}
+                log.info(
+                    "salvage: nothing presented — building cards from %d already-priced market(s)",
+                    len(priced_cache),
+                )
+                return {"reply": reply or _SALVAGE_OK_REPLY, "cards": built,
+                        "events": SearchAgent._leftover_events(built, tools)}
 
         listed = list(tools._markets.keys())
         if listed and len(listed) <= AUTO_PRICE_LIMIT:
-            print(f"DEBUG result salvage: nothing priced — auto-pricing {len(listed)} listed market(s)")
-            print()
+            log.info("salvage: nothing priced — auto-pricing %d listed market(s)", len(listed))
             full = tools.price_markets(listed)
             for m in full["markets"]:
                 priced_cache[m["market_id"]] = m
             synth = {"markets": [{"market_id": mid} for mid in priced_cache]}
             built = SearchAgent._build_cards(synth, priced_cache)
             if built:
-                print(f"  DEBUG salvage produced {len(built)} card(s)")
-                print()
-                return {"reply": reply or _SALVAGE_OK_REPLY, "cards": built, "events": []}
+                log.info("salvage produced %d card(s)", len(built))
+                return {"reply": reply or _SALVAGE_OK_REPLY, "cards": built,
+                        "events": SearchAgent._leftover_events(built, tools)}
 
         # Nothing backable to show — fall back to the events found, as navigation.
         evs = list(tools._events.values())
-        print(f"DEBUG result salvage: nothing backable — falling back to {len(evs)} navigable event(s)")
-        print()
+        log.info("salvage: nothing backable — falling back to %d navigable event(s)", len(evs))
         if evs:
             return {"reply": reply or _SALVAGE_EVENTS_REPLY, "cards": [], "events": evs}
         # Genuinely nothing recovered — this is the only place the apology appears.
@@ -492,9 +585,21 @@ class SearchAgent:
                 args.get("time_from"), args.get("time_to"),
                 args.get("country"),
             )
+        if tc.name == "find_outrights":
+            return tools.find_outrights(args.get("sport", ""), args.get("name", ""))
         if tc.name == "list_market_types":
             return tools.list_market_types(args.get("event_ids", []))
         return {"error": f"unknown tool {tc.name}"}
+
+    @staticmethod
+    def _leftover_events(cards: list, tools: SearchTools) -> list:
+        """Found events not already represented by a salvaged card's event. Lets a
+        salvage that recovered (e.g.) outright cards for a participant still surface
+        that participant's fixtures as navigable events, instead of dropping them —
+        so a bare "England" search shows both the World Cup card AND the England
+        match even when the model skipped present_results."""
+        shown = {c.get("event_id") for c in cards}
+        return [e for e in tools._events.values() if e.get("event_id") not in shown]
 
     @staticmethod
     def _build_event_cards(present_args: dict, tools: SearchTools) -> list:
@@ -598,6 +703,5 @@ def classify_intent(user_input: str) -> str:
     resp = llm.complete(CLASSIFY_SYSTEM, [{"role": "user", "content": user_input}])
     text = (resp.text or "").strip().lower()
     intent = "search" if "search" in text else "bet"
-    print(f"DEBUG classify_intent({user_input!r}) -> {intent}")
-    print()
+    log.debug("classify_intent(%r) -> %s", user_input, intent)
     return intent

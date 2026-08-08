@@ -330,6 +330,12 @@ async function apiFetch(url, options = {}) {
     showLoginPrompt('Your session has expired — please sign in again.');
     throw new Error('session_expired');
   }
+  // The rate limiter replies with {"error": ...} rather than the {"detail": ...}
+  // the rest of the API uses, so translate it here instead of letting callers
+  // render "undefined".
+  if (res.status === 429) {
+    throw new Error('Too many requests — please wait a moment and try again.');
+  }
   return res;
 }
 

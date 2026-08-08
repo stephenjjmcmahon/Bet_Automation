@@ -5,7 +5,7 @@
   ASIAN_HANDICAP                       204 markets
   CORRECT_SCORE                        204 markets
   OVER_UNDER_05                        200 markets
-  BOTH_TEAMS_TO_SCORE                  200 markets
+  BOTH_TEAMS_TO_SCORE                  200 market
   OVER_UNDER_35                        198 markets
   OVER_UNDER_45                        197 markets
   OVER_UNDER_65                        197 markets

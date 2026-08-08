@@ -41,7 +41,7 @@ class PreparedSlip(BaseModel):
     event_start_time: Optional[str] = None
     market_type: Optional[str] = None
     line: Optional[float] = None  # handicap/total line for line markets (e.g. Under 216.5)
-    side: str
+    side: Literal["BACK", "LAY"]
     price: float
     requested_price: Optional[float] = None
     stake: float

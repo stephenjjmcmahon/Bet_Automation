@@ -1,5 +1,8 @@
+import logging
 
 from backend.services.betfair_client import get_market_book
+
+log = logging.getLogger(__name__)
 
 
 class MarketSuspendedError(Exception):
@@ -42,9 +45,12 @@ def get_best_price(market_id: str, selection_id: str, side: str, stake: float, s
 
     if line is not None:
         matching_runners = [r for r in book["runners"] if str(r["selectionId"]) == str(selection_id)]
-        print(f"  DEBUG get_best_price - selectionId={selection_id} line={line}")
-        print(f"  DEBUG book runners for that selectionId (all {len(matching_runners)}): {[(r.get('handicap'), r.get('status')) for r in matching_runners]}")
-        print()
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug(
+                "get_best_price selectionId=%s line=%s — %d row(s) in book: %s",
+                selection_id, line, len(matching_runners),
+                [(r.get("handicap"), r.get("status")) for r in matching_runners],
+            )
         runner = next(
             (r for r in matching_runners if r.get("handicap") == line),
             None,

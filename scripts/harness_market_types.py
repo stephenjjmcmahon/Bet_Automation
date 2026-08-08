@@ -4,9 +4,9 @@ Logs into Betfair, then drives the real `prepare_bet` route with natural-languag
 inputs to confirm a real, placeable slip is produced for each market-type group
 in Market_Types.md. DOES NOT place any bets (never calls /api/confirm).
 
-Usage:
-    python harness_market_types.py discover <sport>      # dump live events/markets
-    python harness_market_types.py test                  # run the input matrix
+Usage (from the repo root):
+    python -m scripts.harness_market_types discover <sport>   # dump live events/markets
+    python -m scripts.harness_market_types test               # run the input matrix
 """
 import os
 import sys

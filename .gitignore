@@ -17,3 +17,9 @@ logs/
 .Rapp.history
 *.log
 .cabal/
+
+# AI-assistant working files — useful locally, not part of the published project
+CLAUDE.md
+memory/
+PORTFOLIO_PREP_PLAN.md
+SEARCH_AGENT_SESSION_NOTES.md

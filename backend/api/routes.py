@@ -1,12 +1,15 @@
 ﻿import json
+import logging
+import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
+from backend.api.rate_limit import AI_RATE_LIMIT, LOGIN_RATE_LIMIT, limiter
 from backend.schemas.bets import BetRequest, PreparedSlip
 from backend.services.ai_interpreter import AIInterpreter
 from backend.services.search_service import (
@@ -31,6 +34,8 @@ from backend.services import pending_slips
 from backend.services import logger
 from backend.services.betfair_auth import get_token, login, SessionExpiredError
 
+log = logging.getLogger(__name__)
+
 
 class LoginRequest(BaseModel):
     username: str
@@ -42,8 +47,13 @@ class FixtureRequest(BaseModel):
     sport: str = "football"
 
 
+# Hard ceiling on any single stake, in GBP. This is a safety rail on a client-supplied
+# value that ends up as a real order on a real exchange — keep the default conservative.
+MAX_STAKE_GBP = float(os.getenv("MAX_STAKE_GBP", "100"))
+
+
 class ConfirmRequest(BaseModel):
-    stake: Optional[float] = None
+    stake: Optional[float] = Field(default=None, gt=0, le=MAX_STAKE_GBP)
 
 
 class FeedbackRequest(BaseModel):
@@ -62,8 +72,8 @@ class PrepareFromMarketRequest(BaseModel):
     event_id: str
     market_id: str
     selection_id: int
-    side: str = "BACK"
-    stake: float
+    side: Literal["BACK", "LAY"] = "BACK"
+    stake: float = Field(gt=0, le=MAX_STAKE_GBP)
     line: Optional[float] = None
     runner_name: Optional[str] = None
     event_name: Optional[str] = None
@@ -90,23 +100,32 @@ def auth_check(request: Request):
 
 
 @router.post("/api/login")
+@limiter.limit(LOGIN_RATE_LIMIT)
 def betfair_login(request: Request, body: LoginRequest):
     try:
         login(body.username, body.password, request.session)
         return {"status": "ok"}
     except ValueError as e:
+        # Betfair's own rejection reason (bad password, account locked) — safe to pass on.
         raise HTTPException(status_code=401, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Could not reach Betfair: {str(e)}")
+    except Exception:
+        # Anything else is our side of the wire. Log the detail, return a generic
+        # message rather than leaking internal error text to the client.
+        log.exception("Betfair login request failed")
+        raise HTTPException(status_code=502, detail="Could not reach Betfair. Please try again.")
 
 
-@router.post("/api/fixtures")
+@router.post("/api/fixtures", dependencies=[Depends(_require_session)])
 def fixtures(request: Request, body: FixtureRequest):
     try:
         result = get_upcoming_fixtures(body.team_name, body.sport, request.session, limit=3)
         return {"fixtures": result}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except SessionExpiredError:
+        # Must reach the global handler as a 401 or the frontend never re-shows login.
+        raise
+    except Exception:
+        log.exception("Fixture lookup failed for %s", body.team_name)
+        raise HTTPException(status_code=500, detail="Could not load fixtures.")
 
 
 def _persist_slip(
@@ -145,6 +164,10 @@ def _persist_slip(
     )
 
     betslip = create_betslip(market_id, selection_id, side, live_price, stake)
+    # Local bookkeeping, not part of the Betfair payload (place_orders only reads
+    # "marketId" and "instructions"). Confirm-time re-pricing needs the same
+    # handicap line used here, or it would match the wrong row of a line market.
+    betslip["_priceLine"] = price_line
 
     slip_id = str(uuid4())
     pending_slips.save(request.session, slip_id, betslip)
@@ -237,8 +260,10 @@ def _build_slip(
             book=market_ids.get("book"),
         )
     except (MarketSuspendedError, InsufficientLiquidityError, ValueError) as e:
-        print(f"DEBUG get_best_price failed for {market_ids['marketId']}/{chosen_market_type}: {type(e).__name__}: {e}")
-        print()
+        log.warning(
+            "Market %s/%s not viable, skipping: %s: %s",
+            market_ids["marketId"], chosen_market_type, type(e).__name__, e,
+        )
         return None
 
 
@@ -265,8 +290,8 @@ def _prepare_slips(request: Request, body: BetRequest) -> list[PreparedSlip]:
         raise HTTPException(status_code=500, detail="AI returned ok status but no parsed bet")
 
     parsed_bet = clarification.parsed_bet
-    print(f"DEBUG parsed_bet: {parsed_bet.model_dump()}")
-    print()
+    # Debug level: this echoes the user's bet, so it stays off by default.
+    log.debug("parsed_bet: %s", parsed_bet.model_dump())
 
     slips = []
 
@@ -288,8 +313,8 @@ def _prepare_slips(request: Request, body: BetRequest) -> list[PreparedSlip]:
                 },
             )
 
-        print(f"DEBUG racing matches: {[(m['eventName'], m['marketId']) for m in matches]}")
-        print()
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("racing matches: %s", [(m["eventName"], m["marketId"]) for m in matches])
 
         for market_ids in matches:
             slip = _build_slip(
@@ -309,21 +334,19 @@ def _prepare_slips(request: Request, body: BetRequest) -> list[PreparedSlip]:
         else:
             candidates = find_event_candidates(parsed_bet, request.session)
 
-        print(f"DEBUG candidates count: {len(candidates)}")
-        print()
-
-        print(f"DEBUG first 3 candidates: {[c['event']['name'] for c in candidates[:3]]}")
-        print()
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug(
+                "%d candidate event(s); first 3: %s",
+                len(candidates), [c["event"]["name"] for c in candidates[:3]],
+            )
 
         market_types = get_market_types(parsed_bet.sport, candidates, request.session)
-        print(f"DEBUG market_types: {market_types}")
-        print()
+        log.debug("available market types: %s", market_types)
 
         selections = AIInterpreter.select_top_events(
             body.user_input, candidates, market_types, parsed_bet=parsed_bet
         )
-        print(f"DEBUG selections: {selections}")
-        print()
+        log.debug("AI selections: %s", selections)
 
         if not selections:
             logger.log_failure(
@@ -346,8 +369,7 @@ def _prepare_slips(request: Request, body: BetRequest) -> list[PreparedSlip]:
             try:
                 market_ids = resolve_market(event_id, parsed_bet, request.session, market_type=chosen_market_type, user_input=body.user_input)
             except ValueError as e:
-                print(f"DEBUG resolve_market failed for {event_id}: {e}")
-                print()
+                log.warning("resolve_market failed for event %s: %s", event_id, e)
                 continue
 
             slip = _build_slip(
@@ -362,11 +384,15 @@ def _prepare_slips(request: Request, body: BetRequest) -> list[PreparedSlip]:
             if slip:
                 slips.append(slip)
 
-    print(f"DEBUG prepared slips ({len(slips)}):")
-    handicap_str = f"  handicap={parsed_bet.line}" if parsed_bet.line is not None else ""
-    for i, s in enumerate(slips, 1):
-        print(f"  {i}.  event={s.event_name}  |  market={s.market_type}  |  runner={s.runner_name or s.selection_name}{handicap_str}  |  {s.side} @ {s.price}")
-    print()
+    log.info("Prepared %d slip(s) for %r", len(slips), body.user_input)
+    if log.isEnabledFor(logging.DEBUG):
+        handicap_str = f" handicap={parsed_bet.line}" if parsed_bet.line is not None else ""
+        for i, s in enumerate(slips, 1):
+            log.debug(
+                "  %d. event=%s | market=%s | runner=%s%s | %s @ %s",
+                i, s.event_name, s.market_type,
+                s.runner_name or s.selection_name, handicap_str, s.side, s.price,
+            )
 
     if not slips:
         logger.log_failure(
@@ -405,25 +431,28 @@ def _live_search_history(request: Request) -> list:
         except ValueError:
             age = None
         if age is not None and age > SEARCH_HISTORY_TTL_SECONDS:
-            print(f"DEBUG search history expired ({int(age)}s old > {SEARCH_HISTORY_TTL_SECONDS}s) — starting fresh")
-            print()
+            log.debug(
+                "search history expired (%ds old > %ds) — starting fresh",
+                int(age), SEARCH_HISTORY_TTL_SECONDS,
+            )
             return []
     return history
 
 
 @router.post("/api/prepare", response_model=list[PreparedSlip], dependencies=[Depends(_require_session)])
+@limiter.limit(AI_RATE_LIMIT)
 def prepare_bet(request: Request, body: BetRequest):
     return _prepare_slips(request, body)
 
 
 @router.post("/api/query", dependencies=[Depends(_require_session)])
+@limiter.limit(AI_RATE_LIMIT)
 def query(request: Request, body: BetRequest):
     """Single entry point for the NL box: classify the input and dispatch. Bet
     intent reuses the existing pipeline (same slips, same 422 clarification);
     search intent runs the market-search agent and returns priced cards."""
     intent = classify_intent(body.user_input)
-    print(f"DEBUG query intent: {intent}")
-    print()
+    log.info("Query classified as %r intent", intent)
 
     if intent == "bet":
         slips = _prepare_slips(request, body)
@@ -454,21 +483,18 @@ def reset_search(request: Request):
     so it works even after the Betfair token has expired."""
     request.session.pop(SEARCH_HISTORY_KEY, None)
     request.session.pop(SEARCH_HISTORY_AT_KEY, None)
-    print("DEBUG search history reset")
-    print()
+    log.debug("search history reset")
     return {"status": "ok"}
 
 
 @router.post("/api/confirm/{slip_id}", dependencies=[Depends(_require_session)])
 def confirm_bet(slip_id: str, request: Request, body: ConfirmRequest = ConfirmRequest()):
-    print(f"DEBUG confirm session keys: {list(request.session.keys())}")
-    print()
-
-    print(f"DEBUG pending_slips in session: {list(request.session.get('pending_slips', {}).keys())}")
-    print()
-
-    print(f"DEBUG looking for slip_id: {slip_id}")
-    print()
+    if log.isEnabledFor(logging.DEBUG):
+        log.debug(
+            "confirm %s — session keys=%s, pending slips=%s",
+            slip_id, list(request.session.keys()),
+            list(request.session.get("pending_slips", {}).keys()),
+        )
     created_at = pending_slips.get_created_at(request.session, slip_id)
     betslip = pending_slips.pop(request.session, slip_id)
 
@@ -477,13 +503,34 @@ def confirm_bet(slip_id: str, request: Request, body: ConfirmRequest = ConfirmRe
             logger.log_slip_expired(slip_id)
         raise HTTPException(status_code=404, detail="Slip not found or expired")
 
-    if body.stake is not None:
-        betslip["instructions"][0]["limitOrder"]["size"] = body.stake
+    instruction = betslip["instructions"][0]
+
+    # The frontend lets the user edit the stake box between prepare and confirm, so
+    # the stake that reaches Betfair may not be the one get_best_price validated at
+    # prepare time. Re-run the liquidity gate against the live book for the new
+    # amount rather than trusting a client-supplied size — otherwise a £2 slip that
+    # passed the gate can be confirmed at the MAX_STAKE_GBP ceiling unchecked.
+    if body.stake is not None and body.stake != instruction["limitOrder"]["size"]:
+        try:
+            live_price = get_best_price(
+                betslip["marketId"],
+                instruction["selectionId"],
+                instruction["side"],
+                body.stake,
+                request.session,
+                line=betslip.get("_priceLine"),
+            )
+        except (MarketSuspendedError, InsufficientLiquidityError) as e:
+            raise HTTPException(status_code=409, detail=str(e))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+        instruction["limitOrder"]["size"] = body.stake
+        # The stored price is stale by now — the re-fetched book is the honest one.
+        instruction["limitOrder"]["price"] = live_price
 
     now = datetime.now(timezone.utc)
     time_to_confirm_ms = int((now - created_at).total_seconds() * 1000) if created_at else None
-
-    logger.log_bet_confirmed(slip_id=slip_id, time_to_confirm_ms=time_to_confirm_ms)
 
     result = place_orders(betslip["marketId"], betslip["instructions"], request.session)
 
@@ -501,17 +548,24 @@ def confirm_bet(slip_id: str, request: Request, body: ConfirmRequest = ConfirmRe
             or result.get("errorCode")
             or "UNKNOWN"
         )
-        print(f"DEBUG placeOrders rejected: status={result.get('status')} errorCode={error_code} body={result}")
-        print()
+        log.warning(
+            "placeOrders rejected slip %s: status=%s errorCode=%s body=%s",
+            slip_id, result.get("status"), error_code, result,
+        )
         raise HTTPException(
             status_code=400,
             detail=f"Betfair did not place the bet (code: {error_code}). It has not been placed on your account.",
         )
 
+    # Logged only once Betfair has actually accepted the order, so betting.db never
+    # records a 'confirmed' bet that never went on.
+    log.info("Bet placed for slip %s on market %s", slip_id, betslip["marketId"])
+    logger.log_bet_confirmed(slip_id=slip_id, time_to_confirm_ms=time_to_confirm_ms)
+
     return result
 
 
-@router.post("/api/feedback")
+@router.post("/api/feedback", dependencies=[Depends(_require_session)])
 def feedback(body: FeedbackRequest):
     Path("logs").mkdir(exist_ok=True)
     entry = {
@@ -526,7 +580,7 @@ def feedback(body: FeedbackRequest):
     return {"status": "ok"}
 
 
-@router.post("/api/search/feedback")
+@router.post("/api/search/feedback", dependencies=[Depends(_require_session)])
 def search_feedback(body: SearchFeedbackRequest):
     """Record a thumbs up/down on a search result, stored as 1/0 on the matching
     `searches` row. No Betfair session needed — it's a write to our own log DB."""

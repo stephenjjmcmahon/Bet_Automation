@@ -1,7 +1,11 @@
-﻿from backend.services.betfair_client import betfair_post, list_events, list_market_catalogue, list_market_types_for_events, list_market_types_for_sport, get_market_book
+﻿import logging
+
+from backend.services.betfair_client import betfair_post, list_events, list_market_catalogue, list_market_types_for_events, list_market_types_for_sport, get_market_book
 from backend.services.market_resolver import resolve_selection
 from backend.services.ai_interpreter import AIInterpreter
 from backend.config.sport_mapping import SPORT_EVENT_TYPE_MAP, COMPETITION_SPORTS, event_type_id_for
+
+log = logging.getLogger(__name__)
 
 # Max events to hand the AI in the zero-result fallback. Small sports (basketball
 # and below, ≤35) fit comfortably; cricket (51) / tennis (282) / soccer (332) are
@@ -136,8 +140,7 @@ def _repick_active(market: dict, active_ids: set, parsed_bet, user_input: str) -
 def resolve_market(event_id: str, parsed_bet, session: dict, market_type: str, user_input: str = "") -> dict:
     markets = list_market_catalogue(event_id, market_type, session)
 
-    print(f"DEBUG resolve_market - event={event_id} type={market_type} ({len(markets)} markets found)")
-    print()
+    log.debug("resolve_market event=%s type=%s (%d market(s) found)", event_id, market_type, len(markets))
 
     if not markets:
         raise ValueError(f"No {market_type} market found for event {event_id}")
@@ -161,8 +164,10 @@ def resolve_market(event_id: str, parsed_bet, session: dict, market_type: str, u
             market, selection_id, runner_name = _match_by_ai(
                 markets, user_input or parsed_bet.selection_name
             )
-        print(f"  DEBUG resolved selectionId={selection_id} runner='{runner_name}'  (looking for name='{parsed_bet.selection_name}' line={parsed_bet.line})")
-        print()
+        log.debug(
+            "resolved selectionId=%s runner=%r (wanted name=%r line=%s)",
+            selection_id, runner_name, parsed_bet.selection_name, parsed_bet.line,
+        )
 
     if selection_id is None:
         raise ValueError(
@@ -178,8 +183,7 @@ def resolve_market(event_id: str, parsed_bet, session: dict, market_type: str, u
         active_ids = {r["selectionId"] for r in book.get("runners", []) if r.get("status") == "ACTIVE"}
         if selection_id not in active_ids:
             selection_id, runner_name = _repick_active(market, active_ids, parsed_bet, user_input)
-            print(f"  DEBUG re-picked active selectionId={selection_id} runner='{runner_name}'")
-            print()
+            log.debug("re-picked active selectionId=%s runner=%r", selection_id, runner_name)
             if selection_id is None:
                 raise ValueError(
                     f"Runner '{parsed_bet.selection_name}' is not an active runner in market {market['marketId']}."

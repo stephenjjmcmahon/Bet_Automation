@@ -1,5 +1,7 @@
 """
-Run with:  python explore_betfair.py
+Developer script — discovery aid, not part of the app.
+
+Run from the repo root:  python -m scripts.explore_betfair
 Prints all events and market types available on Betfair for a given sport.
 Reads credentials from .env — make sure BETFAIR_USERNAME/PASSWORD/APP_KEY are set.
 """
