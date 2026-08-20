@@ -1,9 +1,11 @@
-import pytest
 from unittest.mock import patch
+
+import pytest
+
 from backend.services.odds_service import (
-    get_best_price,
-    MarketSuspendedError,
     InsufficientLiquidityError,
+    MarketSuspendedError,
+    get_best_price,
 )
 
 MARKET_ID = "1.234567"

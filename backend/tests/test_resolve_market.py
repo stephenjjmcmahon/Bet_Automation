@@ -7,6 +7,7 @@ Covers the two limitations the resolver was hardened against:
      reachable beyond the first one.
 """
 from unittest.mock import patch
+
 import pytest
 
 from backend.schemas.bets import ParsedBet

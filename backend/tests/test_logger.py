@@ -1,6 +1,8 @@
 import sqlite3
-import pytest
 from datetime import datetime
+
+import pytest
+
 from backend.services import logger
 
 
@@ -28,16 +30,16 @@ def _failures(db_path):
 
 
 def _prepared(db, **overrides):
-    kwargs = dict(
-        slip_id="abc",
-        time_to_slip_ms=1000,
-        selection_name="Arsenal",
-        side="BACK",
-        stake=10.0,
-        price=3.0,
-        market_id="1.123",
-        event_id="123",
-    )
+    kwargs = {
+        "slip_id": "abc",
+        "time_to_slip_ms": 1000,
+        "selection_name": "Arsenal",
+        "side": "BACK",
+        "stake": 10.0,
+        "price": 3.0,
+        "market_id": "1.123",
+        "event_id": "123",
+    }
     kwargs.update(overrides)
     logger.log_slip_prepared(**kwargs)
 

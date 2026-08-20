@@ -9,7 +9,7 @@ and that listMarketBook is batched within Betfair's 40-market weight cap.
 from unittest.mock import patch
 
 from backend.services import betfair_client, search_tools
-from backend.services.search_tools import SearchTools, MAX_PRICED_MARKETS
+from backend.services.search_tools import MAX_PRICED_MARKETS, SearchTools
 
 
 def _cat_market(mid, total, runners=None, mtype="MATCH_ODDS"):

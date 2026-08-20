@@ -20,10 +20,11 @@ class FakeRequest:
 
 
 def _body(**kw):
-    base = dict(
-        event_id="e1", market_id="1.23", selection_id=47, side="BACK", stake=10.0,
-        runner_name="Over 2.5", event_name="A v B", market_type="OVER_UNDER_25",
-    )
+    base = {
+        "event_id": "e1", "market_id": "1.23", "selection_id": 47, "side": "BACK",
+        "stake": 10.0, "runner_name": "Over 2.5", "event_name": "A v B",
+        "market_type": "OVER_UNDER_25",
+    }
     base.update(kw)
     return PrepareFromMarketRequest(**base)
 

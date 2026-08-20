@@ -1,8 +1,13 @@
 import re
 
-from backend.services.betfair_client import list_racing_markets, list_place_markets_for_event, get_market_winners
-from backend.services.market_resolver import resolve_selection
 from backend.config.sport_mapping import event_type_id_for
+from backend.services.betfair_client import (
+    get_market_winners,
+    list_place_markets_for_event,
+    list_racing_markets,
+)
+from backend.services.concurrency import parallel_map
+from backend.services.market_resolver import resolve_selection
 
 # ── Racing (horse / greyhound) ────────────────────────────────────────────────
 # Racing bets resolve by runner name, not event name, so they skip the AI
@@ -19,11 +24,27 @@ RACING_MARKET_MAP = {
     "WIN": "WIN",
     "MATCH_ODDS": "WIN",       # parser's generic default — for racing it means a straight win bet
     "OUTRIGHT_WINNER": "WIN",
+    "WINNER": "WIN",           # the football/outright code, occasionally emitted for racing
     "PLACE": "PLACE",
     "TO_BE_PLACED": "PLACE",
     "ANTEPOST_WIN": "ANTEPOST_WIN",
     "EACH_WAY": "EACH_WAY",    # Betfair's native each-way market — a single back settles win + place
 }
+
+# "top 3" style finishes. The parser is supposed to emit PLACE + places=N for
+# these, but it also emits golf's TOP_<n>_FINISH family for racing — two real
+# logged examples, "Shallow top 3 in york 1 pound" and "1 euro on Harry mole not
+# to be top 3 Horse racing", both parsed as TOP_3_FINISH. Read the count out of
+# the code rather than losing it.
+_TOP_N_RE = re.compile(r"^TOP_(\d+)(?:_FINISH)?$")
+# Same family, no count in the code — treat as a plain place bet.
+_TOP_N_GENERIC = {"TOP_N_FINISH", "TOP_FINISH"}
+
+UNSUPPORTED_RACING_DEFAULT = (
+    "I don't support {label} bets on racing yet — try a win, place, each-way or "
+    "ante-post bet on a single runner."
+)
+
 
 RACING_UNSUPPORTED_MESSAGES = {
     "FORECAST": "Forecast bets aren't supported yet — try a win or place bet on a single runner.",
@@ -46,6 +67,39 @@ class RacingClarificationError(Exception):
     def __init__(self, question: str):
         self.question = question
         super().__init__(question)
+
+
+def racing_market_for(label: str | None, requested_places: int | None = None) -> tuple[str, int | None]:
+    """Map a parsed market_type label to (Betfair racing market type, places).
+
+    Raises UnsupportedRacingMarketError for anything not understood. That matters:
+    this used to be `RACING_MARKET_MAP.get(label, "WIN")`, so an unrecognised
+    label silently became a WIN bet — a "top 3" request would have gone on as
+    money on the horse to win outright, a different market at different odds.
+    Declining is the safe failure; placing a bet other than the one asked for is
+    not.
+
+    Kept as a standalone function so the offline audit (backend/eval) can ask the
+    real mapping what it does instead of reimplementing it.
+    """
+    label = (label or "WIN").upper().strip()
+
+    if label in RACING_UNSUPPORTED_MESSAGES:
+        raise UnsupportedRacingMarketError(RACING_UNSUPPORTED_MESSAGES[label])
+
+    if label in RACING_MARKET_MAP:
+        return RACING_MARKET_MAP[label], requested_places
+
+    top_n = _TOP_N_RE.match(label)
+    if top_n:
+        # An explicit places= from the parser wins; otherwise take the count
+        # encoded in the market type ("TOP_3_FINISH" -> 3 places).
+        return "PLACE", requested_places or int(top_n.group(1))
+
+    if label in _TOP_N_GENERIC:
+        return "PLACE", requested_places
+
+    raise UnsupportedRacingMarketError(UNSUPPORTED_RACING_DEFAULT.format(label=label))
 
 
 def _racing_match(market: dict, market_type: str, selection_id: int, runner_name: str, places: int | None = None) -> dict:
@@ -199,14 +253,15 @@ def resolve_racing_markets(parsed_bet, user_input: str, session: dict) -> list[d
     WIN / PLACE / ANTEPOST_WIN / EACH_WAY are all single-runner markets resolved
     identically — only the market type fetched differs.
     """
-    from backend.services.ai_interpreter import AIInterpreter  # local import: ai_interpreter is heavy (OpenAI client)
+    from backend.services.ai_interpreter import (
+        AIInterpreter,  # local import: ai_interpreter is heavy (OpenAI client)
+    )
 
     event_type_id = event_type_id_for(parsed_bet.sport)
 
-    label = (parsed_bet.market_type or "WIN").upper()
-    if label in RACING_UNSUPPORTED_MESSAGES:
-        raise UnsupportedRacingMarketError(RACING_UNSUPPORTED_MESSAGES[label])
-    market_type = RACING_MARKET_MAP.get(label, "WIN")
+    # Raises UnsupportedRacingMarketError rather than silently falling back to a
+    # WIN bet, and recovers the places count out of a TOP_<n>_FINISH label.
+    market_type, places = racing_market_for(parsed_bet.market_type, parsed_bet.places)
 
     def _finalize(found: list[dict]) -> list[dict]:
         """Place bets: per matched race, swap the standard PLACE market for the
@@ -215,14 +270,24 @@ def resolve_racing_markets(parsed_bet, user_input: str, session: dict) -> list[d
         per race — this just refines which place market within each."""
         if market_type != "PLACE":
             return found
+        # Each race costs two serial Betfair calls (list_place_markets_for_event
+        # then get_market_winners), and the races are independent — overlap them.
+        # parallel_map preserves input order, so `refined` stays in the same
+        # FIRST_TO_START order the serial loop produced.
         refined = []
-        for m in found:
-            chosen = _select_place_market(m["eventId"], parsed_bet.selection_name, parsed_bet.places, session)
+        for chosen, exc in parallel_map(
+            lambda m: _select_place_market(
+                m["eventId"], parsed_bet.selection_name, places, session
+            ),
+            found,
+        ):
+            if exc is not None:
+                raise exc
             if chosen:
                 refined.append(chosen)
         if not refined:
             raise RacingClarificationError(
-                f"'{parsed_bet.selection_name}' doesn't have a market paying {parsed_bet.places} places. "
+                f"'{parsed_bet.selection_name}' doesn't have a market paying {places} places. "
                 "Try a different number of places, or a plain place bet."
             )
         return refined

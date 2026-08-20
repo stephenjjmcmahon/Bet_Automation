@@ -17,7 +17,6 @@ Normalized tool definition (parameters is a JSON Schema dict):
 import json
 import os
 from dataclasses import dataclass, field
-from typing import Optional
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -34,7 +33,7 @@ class ToolCall:
 
 @dataclass
 class LLMResponse:
-    text: Optional[str] = None
+    text: str | None = None
     tool_calls: list = field(default_factory=list)
 
 

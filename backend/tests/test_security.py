@@ -2,14 +2,15 @@
 validation and rate limiting."""
 
 import os
-import pytest
 from unittest.mock import patch
+
+import pytest
 from fastapi.testclient import TestClient
 
 import backend.main as main
-from backend.main import app, validate_environment
 from backend.api.rate_limit import limiter
 from backend.api.routes import _require_session
+from backend.main import app, validate_environment
 from backend.services.betfair_auth import SessionExpiredError
 
 

@@ -1,38 +1,42 @@
-﻿import json
+import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from backend.api.rate_limit import AI_RATE_LIMIT, LOGIN_RATE_LIMIT, limiter
+from backend.config.sport_mapping import COMPETITION_SPORTS, RACING_SPORTS
 from backend.schemas.bets import BetRequest, PreparedSlip
+from backend.services import logger, pending_slips
 from backend.services.ai_interpreter import AIInterpreter
-from backend.services.search_service import (
-    find_event_candidates,
-    find_all_events_for_sport,
-    resolve_market,
-    get_upcoming_fixtures,
-    get_market_types,
+from backend.services.betfair_auth import SessionExpiredError, get_token, login
+from backend.services.betfair_client import get_market_book, place_orders
+from backend.services.betslips_service import create_betslip
+from backend.services.concurrency import parallel_map
+from backend.services.odds_service import (
+    InsufficientLiquidityError,
+    MarketSuspendedError,
+    get_best_price,
 )
-from backend.services.search_tools import SearchTools
-from backend.services.search_agent import SearchAgent, classify_intent
 from backend.services.racing_service import (
-    resolve_racing_markets,
     RacingClarificationError,
     UnsupportedRacingMarketError,
+    resolve_racing_markets,
 )
-from backend.config.sport_mapping import COMPETITION_SPORTS, RACING_SPORTS
-from backend.services.betslips_service import create_betslip
-from backend.services.betfair_client import place_orders
-from backend.services.odds_service import get_best_price, MarketSuspendedError, InsufficientLiquidityError
-from backend.services import pending_slips
-from backend.services import logger
-from backend.services.betfair_auth import get_token, login, SessionExpiredError
+from backend.services.search_agent import SearchAgent, classify_intent
+from backend.services.search_service import (
+    find_all_events_for_sport,
+    find_event_candidates,
+    get_market_types,
+    get_upcoming_fixtures,
+    resolve_market,
+)
+from backend.services.search_tools import SearchTools
 
 log = logging.getLogger(__name__)
 
@@ -53,14 +57,14 @@ MAX_STAKE_GBP = float(os.getenv("MAX_STAKE_GBP", "100"))
 
 
 class ConfirmRequest(BaseModel):
-    stake: Optional[float] = Field(default=None, gt=0, le=MAX_STAKE_GBP)
+    stake: float | None = Field(default=None, gt=0, le=MAX_STAKE_GBP)
 
 
 class FeedbackRequest(BaseModel):
     input: str
     output: dict
     correct: bool
-    note: Optional[str] = None
+    note: str | None = None
 
 
 class SearchFeedbackRequest(BaseModel):
@@ -74,12 +78,12 @@ class PrepareFromMarketRequest(BaseModel):
     selection_id: int
     side: Literal["BACK", "LAY"] = "BACK"
     stake: float = Field(gt=0, le=MAX_STAKE_GBP)
-    line: Optional[float] = None
-    runner_name: Optional[str] = None
-    event_name: Optional[str] = None
-    competition: Optional[str] = None
-    market_type: Optional[str] = None
-    event_start_time: Optional[str] = None
+    line: float | None = None
+    runner_name: str | None = None
+    event_name: str | None = None
+    competition: str | None = None
+    market_type: str | None = None
+    event_start_time: str | None = None
 
 
 class MarketRunnersRequest(BaseModel):
@@ -107,12 +111,14 @@ def betfair_login(request: Request, body: LoginRequest):
         return {"status": "ok"}
     except ValueError as e:
         # Betfair's own rejection reason (bad password, account locked) — safe to pass on.
-        raise HTTPException(status_code=401, detail=str(e))
-    except Exception:
+        raise HTTPException(status_code=401, detail=str(e)) from e
+    except Exception as e:
         # Anything else is our side of the wire. Log the detail, return a generic
         # message rather than leaking internal error text to the client.
         log.exception("Betfair login request failed")
-        raise HTTPException(status_code=502, detail="Could not reach Betfair. Please try again.")
+        raise HTTPException(
+            status_code=502, detail="Could not reach Betfair. Please try again."
+        ) from e
 
 
 @router.post("/api/fixtures", dependencies=[Depends(_require_session)])
@@ -123,9 +129,9 @@ def fixtures(request: Request, body: FixtureRequest):
     except SessionExpiredError:
         # Must reach the global handler as a 401 or the frontend never re-shows login.
         raise
-    except Exception:
+    except Exception as e:
         log.exception("Fixture lookup failed for %s", body.team_name)
-        raise HTTPException(status_code=500, detail="Could not load fixtures.")
+        raise HTTPException(status_code=500, detail="Could not load fixtures.") from e
 
 
 def _persist_slip(
@@ -138,16 +144,16 @@ def _persist_slip(
     side: str,
     stake: float,
     selection_name: str,
-    market_type: Optional[str],
-    runner_name: Optional[str] = None,
-    event_name: Optional[str] = None,
-    competition: Optional[str] = None,
-    event_start_time: Optional[str] = None,
-    requested_price: Optional[float] = None,
-    price_line: Optional[float] = None,
-    line: Optional[float] = None,
-    places: Optional[int] = None,
-    book: Optional[dict] = None,
+    market_type: str | None,
+    runner_name: str | None = None,
+    event_name: str | None = None,
+    competition: str | None = None,
+    event_start_time: str | None = None,
+    requested_price: float | None = None,
+    price_line: float | None = None,
+    line: float | None = None,
+    places: int | None = None,
+    book: dict | None = None,
 ) -> PreparedSlip:
     """Price-check an already-resolved selection and store it as a PreparedSlip.
 
@@ -172,7 +178,7 @@ def _persist_slip(
     slip_id = str(uuid4())
     pending_slips.save(request.session, slip_id, betslip)
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     time_to_slip_ms = int((now - request_start).total_seconds() * 1000)
 
     time_to_event_seconds = None
@@ -223,9 +229,9 @@ def _build_slip(
     parsed_bet,
     market_ids: dict,
     chosen_market_type: str,
-    event_name: Optional[str],
-    event_start_time: Optional[str],
-) -> Optional[PreparedSlip]:
+    event_name: str | None,
+    event_start_time: str | None,
+) -> PreparedSlip | None:
     """Price-check a resolved market and turn it into a stored PreparedSlip.
 
     Returns None when the market isn't viable (suspended / insufficient
@@ -271,7 +277,7 @@ def _prepare_slips(request: Request, body: BetRequest) -> list[PreparedSlip]:
     """The natural-language bet pipeline: parse → find event(s) → resolve market →
     price → slip(s). Shared by POST /api/prepare and POST /api/query (bet intent),
     raising the same HTTPExceptions (including the 422 clarification) for both."""
-    request_start = datetime.now(timezone.utc)
+    request_start = datetime.now(UTC)
 
     clarification = AIInterpreter.interpret(body.user_input)
 
@@ -301,7 +307,7 @@ def _prepare_slips(request: Request, body: BetRequest) -> list[PreparedSlip]:
         try:
             matches = resolve_racing_markets(parsed_bet, body.user_input, request.session)
         except UnsupportedRacingMarketError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+            raise HTTPException(status_code=400, detail=str(e)) from e
         except RacingClarificationError as e:
             raise HTTPException(
                 status_code=422,
@@ -311,10 +317,25 @@ def _prepare_slips(request: Request, body: BetRequest) -> list[PreparedSlip]:
                     "missing_fields": ["event_name"],
                     "parsed_bet": parsed_bet.model_dump(),
                 },
-            )
+            ) from e
 
         if log.isEnabledFor(logging.DEBUG):
             log.debug("racing matches: %s", [(m["eventName"], m["marketId"]) for m in matches])
+
+        # Unlike the H2H path, racing matches arrive without a market book, so each
+        # _build_slip below would fetch one serially inside get_best_price. Fetch
+        # them concurrently up front and hand them down instead — same call, same
+        # data, just overlapped. A match whose book fetch failed keeps book=None and
+        # falls back to fetching inline, so behaviour is unchanged either way.
+        for market_ids, (book, exc) in zip(
+            matches,
+            parallel_map(lambda m: get_market_book(m["marketId"], request.session), matches),
+            strict=True,
+        ):
+            if exc is None:
+                market_ids["book"] = book
+            else:
+                log.debug("book prefetch failed for market %s: %s", market_ids["marketId"], exc)
 
         for market_ids in matches:
             slip = _build_slip(
@@ -359,18 +380,37 @@ def _prepare_slips(request: Request, body: BetRequest) -> list[PreparedSlip]:
                 detail="No matching event found on Betfair. Try including the opponent or competition.",
             )
 
-        for sel in selections:
+        # Each candidate's resolve_market is an independent chain of Betfair calls
+        # (catalogue + market book, sometimes an LLM runner match), so the ranked
+        # candidates are resolved concurrently instead of one after another.
+        # Slip *building* stays on this thread and in rank order: _build_slip
+        # writes the pending slip into request.session, and concurrent
+        # read-modify-write of that dict would lose slips. It costs nothing to
+        # serialise — resolve_market hands its already-fetched book down to
+        # get_best_price, so _build_slip makes no further Betfair call here.
+        resolved = parallel_map(
+            lambda sel: resolve_market(
+                sel["event_id"], parsed_bet, request.session,
+                market_type=sel["market_type"], user_input=body.user_input,
+            ),
+            selections,
+        )
+
+        for sel, (market_ids, exc) in zip(selections, resolved, strict=True):
             event_id = sel["event_id"]
             chosen_market_type = sel["market_type"]
             selected = next((c for c in candidates if c["event"]["id"] == event_id), None)
             event_name = selected["event"].get("name") if selected else None
             event_start_time = selected["event"].get("openDate") if selected else None
 
-            try:
-                market_ids = resolve_market(event_id, parsed_bet, request.session, market_type=chosen_market_type, user_input=body.user_input)
-            except ValueError as e:
-                log.warning("resolve_market failed for event %s: %s", event_id, e)
-                continue
+            if exc is not None:
+                # Same handling as the serial version: an unresolvable candidate is
+                # skipped, anything else (notably SessionExpiredError) propagates so
+                # the global handler can still turn it into a 401.
+                if isinstance(exc, ValueError):
+                    log.warning("resolve_market failed for event %s: %s", event_id, exc)
+                    continue
+                raise exc
 
             slip = _build_slip(
                 request,
@@ -427,7 +467,7 @@ def _live_search_history(request: Request) -> list:
     last_at = request.session.get(SEARCH_HISTORY_AT_KEY)
     if last_at:
         try:
-            age = (datetime.now(timezone.utc) - datetime.fromisoformat(last_at)).total_seconds()
+            age = (datetime.now(UTC) - datetime.fromisoformat(last_at)).total_seconds()
         except ValueError:
             age = None
         if age is not None and age > SEARCH_HISTORY_TTL_SECONDS:
@@ -466,7 +506,7 @@ def query(request: Request, body: BetRequest):
         {"role": "user", "content": body.user_input},
         {"role": "assistant", "content": result["reply"]},
     ])[-MAX_HISTORY_TURNS:]
-    request.session[SEARCH_HISTORY_AT_KEY] = datetime.now(timezone.utc).isoformat()
+    request.session[SEARCH_HISTORY_AT_KEY] = datetime.now(UTC).isoformat()
     return {
         "intent": "search",
         "reply": result["reply"],
@@ -488,7 +528,8 @@ def reset_search(request: Request):
 
 
 @router.post("/api/confirm/{slip_id}", dependencies=[Depends(_require_session)])
-def confirm_bet(slip_id: str, request: Request, body: ConfirmRequest = ConfirmRequest()):
+def confirm_bet(slip_id: str, request: Request, body: ConfirmRequest | None = None):
+    body = body or ConfirmRequest()
     if log.isEnabledFor(logging.DEBUG):
         log.debug(
             "confirm %s — session keys=%s, pending slips=%s",
@@ -521,15 +562,15 @@ def confirm_bet(slip_id: str, request: Request, body: ConfirmRequest = ConfirmRe
                 line=betslip.get("_priceLine"),
             )
         except (MarketSuspendedError, InsufficientLiquidityError) as e:
-            raise HTTPException(status_code=409, detail=str(e))
+            raise HTTPException(status_code=409, detail=str(e)) from e
         except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+            raise HTTPException(status_code=400, detail=str(e)) from e
 
         instruction["limitOrder"]["size"] = body.stake
         # The stored price is stale by now — the re-fetched book is the honest one.
         instruction["limitOrder"]["price"] = live_price
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     time_to_confirm_ms = int((now - created_at).total_seconds() * 1000) if created_at else None
 
     result = place_orders(betslip["marketId"], betslip["instructions"], request.session)
@@ -569,7 +610,7 @@ def confirm_bet(slip_id: str, request: Request, body: ConfirmRequest = ConfirmRe
 def feedback(body: FeedbackRequest):
     Path("logs").mkdir(exist_ok=True)
     entry = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "input": body.input,
         "output": body.output,
         "correct": body.correct,
@@ -597,7 +638,7 @@ def prepare_from_market(request: Request, body: PrepareFromMarketRequest):
     results — no parse/resolve needed. Re-prices live via get_best_price, so the
     slip reflects the current market rather than the indicative search-time price.
     The user then confirms via the unchanged POST /api/confirm/{slip_id}."""
-    request_start = datetime.now(timezone.utc)
+    request_start = datetime.now(UTC)
     try:
         return _persist_slip(
             request,
@@ -617,9 +658,9 @@ def prepare_from_market(request: Request, body: PrepareFromMarketRequest):
             line=body.line,
         )
     except (MarketSuspendedError, InsufficientLiquidityError) as e:
-        raise HTTPException(status_code=409, detail=str(e))
+        raise HTTPException(status_code=409, detail=str(e)) from e
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.post("/api/event/{event_id}/markets", dependencies=[Depends(_require_session)])

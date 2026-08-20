@@ -1,13 +1,14 @@
+from datetime import UTC, datetime, timedelta
+from unittest.mock import ANY, patch
+
 import pytest
-from datetime import datetime, timedelta, timezone
-from unittest.mock import patch, ANY
 from fastapi.testclient import TestClient
 
-from backend.main import app
 from backend.api.routes import _require_session
+from backend.main import app
 from backend.schemas.bets import ClarificationResponse, ParsedBet
 from backend.services import pending_slips
-from backend.services.odds_service import MarketSuspendedError, InsufficientLiquidityError
+from backend.services.odds_service import InsufficientLiquidityError, MarketSuspendedError
 
 PARSED_BET = ParsedBet(
     selection_name="Arsenal",
@@ -189,7 +190,7 @@ class TestConfirm:
 
     def test_expired_slip_returns_404(self, client):
         slip_id = _prepare(client).json()[0]["slip_id"]
-        expired_time = datetime.now(timezone.utc) - timedelta(seconds=pending_slips.SLIP_TTL_SECONDS + 1)
+        expired_time = datetime.now(UTC) - timedelta(seconds=pending_slips.SLIP_TTL_SECONDS + 1)
         with patch("backend.api.routes.pending_slips.pop", return_value=None), \
              patch("backend.api.routes.pending_slips.get_created_at", return_value=expired_time):
             assert client.post(f"/api/confirm/{slip_id}").status_code == 404

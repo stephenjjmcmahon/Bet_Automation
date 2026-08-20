@@ -20,9 +20,8 @@ Needs OPENAI_API_KEY in .env. Does NOT touch Betfair (all client calls are mocke
 from unittest.mock import patch
 
 from backend.services import search_agent, search_tools
-from backend.services.search_agent import SearchAgent, AGENT_MODEL
 from backend.services.llm import OpenAIClient
-
+from backend.services.search_agent import AGENT_MODEL, SearchAgent
 
 # ── tiny in-memory Betfair fixture ──────────────────────────────────────────────
 _EVENTS = {

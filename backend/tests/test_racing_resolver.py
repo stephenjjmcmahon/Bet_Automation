@@ -4,9 +4,9 @@ import pytest
 
 from backend.schemas.bets import ParsedBet
 from backend.services.racing_service import (
-    resolve_racing_markets,
     RacingClarificationError,
     UnsupportedRacingMarketError,
+    resolve_racing_markets,
 )
 
 SESSION = {"token": "fake"}

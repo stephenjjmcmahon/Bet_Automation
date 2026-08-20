@@ -8,9 +8,9 @@ from contextlib import ExitStack
 from unittest.mock import patch
 
 from backend.services import search_agent, search_tools
+from backend.services.llm import LLMResponse, ToolCall
 from backend.services.search_agent import SearchAgent
 from backend.services.search_tools import SearchTools
-from backend.services.llm import LLMResponse, ToolCall
 
 
 class FakeLLM:

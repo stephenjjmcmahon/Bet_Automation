@@ -11,7 +11,7 @@ import json
 import logging
 import re
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from backend.services.llm import get_llm
 from backend.services.search_tools import SearchTools
@@ -221,7 +221,7 @@ CLASSIFY_SYSTEM = (
 
 
 def _agent_system_prompt() -> str:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return f"""You are a Betfair Exchange market search assistant. The user asks, in free \
 text, to browse or explore markets; you find the relevant markets and present them \
 priced and ready to bet on. You do NOT place bets — the user does that from the results.

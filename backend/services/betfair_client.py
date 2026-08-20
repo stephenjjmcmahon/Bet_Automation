@@ -1,9 +1,13 @@
 import os
-from datetime import datetime, timezone
+import threading
+import time
+from datetime import UTC, datetime
 
 import requests
 from dotenv import load_dotenv
-from backend.services.betfair_auth import get_token, clear_token, SessionExpiredError
+from requests.adapters import HTTPAdapter
+
+from backend.services.betfair_auth import SessionExpiredError, clear_token, get_token
 
 load_dotenv()
 
@@ -18,6 +22,19 @@ MARKET_BOOK_BATCH_SIZE = 40
 # caps at 30s). The read bound covers the heavy listMarketBook calls.
 BETFAIR_TIMEOUT = (5, 15)
 
+# One pooled HTTPS connection set for the whole process. Without this every call
+# was a bare requests.post(), which reopens the TCP connection and redoes the TLS
+# handshake to api.betfair.com each time — ~100-200ms of pure setup per call, and
+# a single /api/prepare makes several calls serially. requests.Session keeps the
+# connections alive between calls; urllib3's pool is thread-safe, so the
+# concurrent resolvers below can share it. pool_maxsize covers the widest fan-out
+# we issue (see MAX_RACING_MATCHES / the resolver thread pools) with headroom.
+_http = requests.Session()
+_http.mount(
+    "https://",
+    HTTPAdapter(pool_connections=4, pool_maxsize=16, max_retries=0),
+)
+
 
 def betfair_post(path: str, payload: dict, session: dict):
     headers = {
@@ -27,12 +44,12 @@ def betfair_post(path: str, payload: dict, session: dict):
     }
 
     try:
-        r = requests.post(
+        r = _http.post(
             BETFAIR_ENDPOINT + path, json=payload, headers=headers,
             timeout=BETFAIR_TIMEOUT,
         )
-    except requests.Timeout:
-        raise ValueError(f"Betfair request to {path} timed out — please try again")
+    except requests.Timeout as e:
+        raise ValueError(f"Betfair request to {path} timed out — please try again") from e
 
     if r.status_code == 401 or "INVALID_SESSION_INFORMATION" in r.text:
         clear_token(session)
@@ -42,6 +59,59 @@ def betfair_post(path: str, payload: dict, session: dict):
         raise ValueError(f"Betfair {r.status_code} error on {path}: {r.text}")
 
     return r.json()
+
+
+# ── bulk-catalogue TTL cache ──────────────────────────────────────────────────
+# list_racing_markets and list_outright_markets are the two "scan everything"
+# fetches: a busy day is ~450 WIN markets / ~500 outright markets, each with full
+# runner lists. They're re-issued on every racing bet, every ante-post fallback
+# and every outright search, and the underlying data moves on the order of
+# minutes, not milliseconds — so a short process-level TTL collapses the repeats
+# (including a clarification retry, which re-runs the same scan seconds later)
+# to zero API calls.
+#
+# The cache holds public market listings only — no per-user data — so it is
+# shared across sessions. A cache miss still needs a valid token, but a hit is
+# served without one reaching Betfair; that's why the TTL is deliberately short.
+# Set BETFAIR_CATALOGUE_TTL=0 to disable entirely.
+#
+# Cached entries are treated as READ-ONLY by callers (they filter and project,
+# never mutate); the shallow list copy on return guards against accidental
+# append/sort on the cached list itself.
+CATALOGUE_TTL_SECONDS = float(os.getenv("BETFAIR_CATALOGUE_TTL", "45"))
+
+_catalogue_cache: dict[tuple, tuple[float, list]] = {}
+_catalogue_lock = threading.Lock()
+
+
+def clear_catalogue_cache() -> None:
+    """Drop every cached bulk catalogue. Used by tests and available for a manual
+    flush; normal operation just lets entries age out."""
+    with _catalogue_lock:
+        _catalogue_cache.clear()
+
+
+def _cached_catalogue(key: tuple, fetch):
+    """Return `fetch()`'s result for `key`, reusing a non-expired cached copy.
+
+    Only the fetch runs outside the lock, so a slow Betfair call never blocks
+    other keys. Two concurrent misses on the same key can both fetch — harmless
+    (same data, last write wins) and cheaper than holding the lock across I/O.
+    """
+    if CATALOGUE_TTL_SECONDS <= 0:
+        return fetch()
+
+    now = time.monotonic()
+    with _catalogue_lock:
+        hit = _catalogue_cache.get(key)
+        if hit is not None and now - hit[0] < CATALOGUE_TTL_SECONDS:
+            return list(hit[1])
+
+    result = fetch()
+
+    with _catalogue_lock:
+        _catalogue_cache[key] = (time.monotonic(), result)
+    return list(result)
 
 
 def list_market_types_for_events(event_ids: list[str], session: dict) -> list[str]:
@@ -167,19 +237,29 @@ def list_racing_markets(event_type_id: str, market_type: str, session: dict) -> 
     races already run; no upper bound so bets days ahead still resolve.
     Ante-post markets are a separate market type (ANTEPOST_WIN), so they
     never leak into a WIN scan.
+
+    Cached for CATALOGUE_TTL_SECONDS (see above). One consequence: the `from: now`
+    cut-off is up to a TTL old on a cache hit, so a race that went off in the last
+    few seconds can still appear in the pool. That is not a new failure mode —
+    Betfair leaves a market listed until it suspends — and pricing still gates on
+    the live book (get_best_price raises MarketSuspendedError), so such a race
+    cannot produce a placeable slip.
     """
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    payload = {
-        "filter": {
-            "eventTypeIds": [event_type_id],
-            "marketTypeCodes": [market_type],
-            "marketStartTime": {"from": now},
-        },
-        "maxResults": "1000",
-        "marketProjection": ["RUNNER_DESCRIPTION", "EVENT", "MARKET_START_TIME"],
-        "sort": "FIRST_TO_START",
-    }
-    return betfair_post("listMarketCatalogue/", payload, session)
+    def _fetch():
+        now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        payload = {
+            "filter": {
+                "eventTypeIds": [event_type_id],
+                "marketTypeCodes": [market_type],
+                "marketStartTime": {"from": now},
+            },
+            "maxResults": "1000",
+            "marketProjection": ["RUNNER_DESCRIPTION", "EVENT", "MARKET_START_TIME"],
+            "sort": "FIRST_TO_START",
+        }
+        return betfair_post("listMarketCatalogue/", payload, session)
+
+    return _cached_catalogue(("racing", event_type_id, market_type), _fetch)
 
 
 # Outright / competition-level market types across every sport (see docs/Market_Types.md).
@@ -240,20 +320,27 @@ def list_outright_markets(event_type_id: str, session: dict, max_results: int = 
     filter: an in-progress tournament's winner market has a past start time but is
     still open, and listMarketCatalogue already omits settled/closed markets.
     Liquidity-ranked so the busiest competitions (World Cup, the majors) come first.
+
+    Cached for CATALOGUE_TTL_SECONDS — outright markets are the slowest-moving
+    data we fetch (a tournament winner market lives for weeks), so repeat searches
+    within the window reuse the same pool.
     """
-    payload = {
-        "filter": {
-            "eventTypeIds": [event_type_id],
-            "marketTypeCodes": OUTRIGHT_MARKET_TYPES,
-        },
-        "maxResults": str(max_results),
-        "marketProjection": [
-            "RUNNER_DESCRIPTION", "EVENT", "COMPETITION",
-            "MARKET_START_TIME", "MARKET_DESCRIPTION",
-        ],
-        "sort": "MAXIMUM_TRADED",
-    }
-    return betfair_post("listMarketCatalogue/", payload, session)
+    def _fetch():
+        payload = {
+            "filter": {
+                "eventTypeIds": [event_type_id],
+                "marketTypeCodes": OUTRIGHT_MARKET_TYPES,
+            },
+            "maxResults": str(max_results),
+            "marketProjection": [
+                "RUNNER_DESCRIPTION", "EVENT", "COMPETITION",
+                "MARKET_START_TIME", "MARKET_DESCRIPTION",
+            ],
+            "sort": "MAXIMUM_TRADED",
+        }
+        return betfair_post("listMarketCatalogue/", payload, session)
+
+    return _cached_catalogue(("outright", event_type_id, max_results), _fetch)
 
 
 def list_place_markets_for_event(event_id: str, session: dict) -> list:

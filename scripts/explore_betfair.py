@@ -8,10 +8,12 @@ Reads credentials from .env — make sure BETFAIR_USERNAME/PASSWORD/APP_KEY are 
 
 import os
 import sys
+
 from dotenv import load_dotenv
+
+from backend.config.sport_mapping import SPORT_EVENT_TYPE_MAP
 from backend.services.betfair_auth import login
 from backend.services.betfair_client import betfair_post
-from backend.config.sport_mapping import SPORT_EVENT_TYPE_MAP
 
 load_dotenv()
 

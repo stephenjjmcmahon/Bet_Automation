@@ -6,13 +6,13 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, HTMLResponse
-from slowapi.errors import RateLimitExceeded
+from fastapi.responses import HTMLResponse, JSONResponse
 from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from starlette.middleware.sessions import SessionMiddleware
 
-from backend.api.routes import router
 from backend.api.rate_limit import limiter
+from backend.api.routes import router
 from backend.services.betfair_auth import SessionExpiredError
 
 load_dotenv()

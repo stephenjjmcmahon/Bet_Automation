@@ -1,6 +1,7 @@
 import os
+from unittest.mock import DEFAULT, patch
+
 import pytest
-from unittest.mock import patch, DEFAULT
 
 # Set before any test runs so the API secret dependency doesn't reject test requests.
 os.environ.setdefault("API_SECRET_KEY", "test-secret")

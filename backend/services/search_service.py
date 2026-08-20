@@ -1,9 +1,16 @@
-﻿import logging
+import logging
 
-from backend.services.betfair_client import betfair_post, list_events, list_market_catalogue, list_market_types_for_events, list_market_types_for_sport, get_market_book
-from backend.services.market_resolver import resolve_selection
+from backend.config.sport_mapping import COMPETITION_SPORTS, SPORT_EVENT_TYPE_MAP, event_type_id_for
 from backend.services.ai_interpreter import AIInterpreter
-from backend.config.sport_mapping import SPORT_EVENT_TYPE_MAP, COMPETITION_SPORTS, event_type_id_for
+from backend.services.betfair_client import (
+    betfair_post,
+    get_market_book,
+    list_events,
+    list_market_catalogue,
+    list_market_types_for_events,
+    list_market_types_for_sport,
+)
+from backend.services.market_resolver import resolve_selection
 
 log = logging.getLogger(__name__)
 
@@ -63,7 +70,7 @@ def get_market_types(sport: str, candidates: list, session: dict) -> list[str]:
 
 def _line_token(line) -> str:
     """The handicap line as it appears inside a market/runner name ('39.5')."""
-    return ("%g" % line) if line is not None else ""
+    return f"{line:g}" if line is not None else ""
 
 
 def _match_by_name(markets: list, parsed_bet) -> tuple:

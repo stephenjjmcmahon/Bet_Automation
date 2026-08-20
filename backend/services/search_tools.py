@@ -15,6 +15,7 @@ market book itself only carries selectionIds, not names.
 The same instance backs the deterministic browse endpoints (event drill-through),
 which call list_markets / price_markets directly without the agent.
 """
+from backend.config.sport_mapping import UnsupportedSportError, event_type_id_for
 from backend.services.betfair_client import (
     list_events_filtered,
     list_market_books,
@@ -22,7 +23,6 @@ from backend.services.betfair_client import (
     list_markets_for_events,
     list_outright_markets,
 )
-from backend.config.sport_mapping import event_type_id_for, UnsupportedSportError
 
 # Most events handed back to the agent — enough to cover a day's fixtures for a
 # competition without flooding the model's context.

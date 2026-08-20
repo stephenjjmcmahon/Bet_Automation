@@ -10,15 +10,15 @@ Usage (from the repo root):
 """
 import os
 import sys
-import json
-from dotenv import load_dotenv
 
-from backend.services.betfair_auth import login
-from backend.services.betfair_client import betfair_post
+from dotenv import load_dotenv
+from fastapi import HTTPException
+
+from backend.api import routes
 from backend.config.sport_mapping import SPORT_EVENT_TYPE_MAP
 from backend.schemas.bets import BetRequest
-from backend.api import routes
-from fastapi import HTTPException
+from backend.services.betfair_auth import login
+from backend.services.betfair_client import betfair_post
 
 load_dotenv()
 
@@ -166,7 +166,7 @@ def run_matrix(filter_sub=None):
             print(f"  -> {status.upper()}: {payload}")
 
     print("\n\n================ SUMMARY ================")
-    for label, inp, expected, status, payload, ms in rows:
+    for label, _inp, expected, status, payload, ms in rows:
         if status == "ok":
             mt = payload[0].market_type if payload else "?"
             verdict = "SLIP " + ("OK " if (expected is None or mt == expected) else f"!!MT={mt} exp {expected}")
@@ -179,8 +179,8 @@ def run_matrix(filter_sub=None):
 
 def racing(market_type="WIN", sport="horse racing", n=4):
     """Show the next few upcoming real races of a type and their runners."""
-    from backend.services.betfair_client import list_racing_markets
     from backend.config.sport_mapping import event_type_id_for
+    from backend.services.betfair_client import list_racing_markets
     mk = list_racing_markets(event_type_id_for(sport), market_type, SESSION)
     print(f"{len(mk)} {market_type} markets for {sport}")
     for m in mk[:n]:

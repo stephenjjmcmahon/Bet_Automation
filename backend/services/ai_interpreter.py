@@ -1,9 +1,9 @@
 import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -25,20 +25,20 @@ _log.setLevel(logging.INFO)
 
 class BetOutput(BaseModel):
     status: Literal["ok", "clarification_needed"]
-    selection_name: Optional[str] = None
-    event_name: Optional[str] = None
-    sport: Optional[str] = None
-    side: Optional[Literal["BACK", "LAY"]] = None
-    stake: Optional[float] = None
-    price: Optional[float] = None
-    market_type: Optional[str] = None
-    line: Optional[float] = None
-    places: Optional[int] = None
-    opponent: Optional[str] = None
-    competition: Optional[str] = None
-    match_date: Optional[str] = None
-    clarification_question: Optional[str] = None
-    missing_fields: Optional[list[str]] = None
+    selection_name: str | None = None
+    event_name: str | None = None
+    sport: str | None = None
+    side: Literal["BACK", "LAY"] | None = None
+    stake: float | None = None
+    price: float | None = None
+    market_type: str | None = None
+    line: float | None = None
+    places: int | None = None
+    opponent: str | None = None
+    competition: str | None = None
+    match_date: str | None = None
+    clarification_question: str | None = None
+    missing_fields: list[str] | None = None
 
 
 SYSTEM_PROMPT = """You are a precise Betfair Exchange betting instruction parser.
@@ -209,7 +209,7 @@ class AIInterpreter:
             result: BetOutput = response.choices[0].message.parsed
 
             _log.info(json.dumps({
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "input": user_input,
                 "output": result.model_dump(),
             }))
@@ -242,7 +242,7 @@ class AIInterpreter:
 
         except Exception as e:
             _log.info(json.dumps({
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "input": user_input,
                 "error": str(e),
             }))
@@ -253,7 +253,7 @@ class AIInterpreter:
         user_input: str,
         candidates: list,
         market_types: list[str],
-        parsed_bet: Optional[ParsedBet] = None,
+        parsed_bet: ParsedBet | None = None,
         n: int = 3,
     ) -> list[dict]:
         """Returns up to n dicts of {event_id, market_type} ranked best to worst.
@@ -363,7 +363,7 @@ with up to {n} selections ranked from best to worst match.
         return selections
 
     @staticmethod
-    def select_market_runner(user_input: str, runners: list) -> Optional[int]:
+    def select_market_runner(user_input: str, runners: list) -> int | None:
         """Pick the runner (selectionId) matching a non-racing bet when exact /
         substring name matching failed.
 
@@ -430,7 +430,7 @@ Return JSON: {{"selection_id": <selection_id>}} for the runner that best matches
         return None
 
     @staticmethod
-    def select_racing_runner(user_input: str, markets: list) -> Optional[dict]:
+    def select_racing_runner(user_input: str, markets: list) -> dict | None:
         """Pick the race + runner matching a racing bet from one meeting's markets.
 
         Tier-2 racing fallback: exact runner-name matching found nothing, so let

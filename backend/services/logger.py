@@ -1,5 +1,7 @@
 import sqlite3
-from datetime import datetime, timezone
+import threading
+from contextlib import contextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 
 DB_PATH = Path(__file__).resolve().parent.parent.parent / "logs" / "betting.db"
@@ -66,11 +68,31 @@ _CREATE_SEARCHES = """
 """
 
 
+# log_slip_prepared runs inside the request path, so the old behaviour — open a
+# connection, mkdir, run three CREATE TABLE IF NOT EXISTS, set the WAL pragma and
+# check the migration, then close — was paying full setup cost on every write.
+# The connection is now opened once and kept, with schema setup done only on the
+# first use of a given path.
+#
+# Thread-local because FastAPI runs these sync endpoints in a worker threadpool
+# and a sqlite3 connection may not be shared across threads by default. The path
+# is part of the key so tests that monkeypatch DB_PATH to a tmp file still get a
+# fresh connection (and the previous one is closed) rather than the stale handle.
+_local = threading.local()
+
+
 def _get_conn():
-    # Creates the logs/ directory and both tables if they don't already exist,
-    # then returns an open connection ready to use.
+    path = str(DB_PATH)
+    conn = getattr(_local, "conn", None)
+    if conn is not None:
+        if getattr(_local, "path", None) == path:
+            return conn
+        # DB_PATH changed under us — retire the old handle before reopening.
+        conn.close()
+        _local.conn = None
+
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = sqlite3.connect(path)
     conn.execute("PRAGMA journal_mode=WAL")  # better concurrent read performance
     conn.execute(_CREATE_BETS)
     conn.execute(_CREATE_FAILURES)
@@ -80,7 +102,37 @@ def _get_conn():
     cols = [r[1] for r in conn.execute("PRAGMA table_info(searches)").fetchall()]
     if "feedback" not in cols:
         conn.execute("ALTER TABLE searches ADD COLUMN feedback INTEGER")
+    conn.commit()
+
+    _local.conn = conn
+    _local.path = path
     return conn
+
+
+@contextmanager
+def _write():
+    """Yield the thread's connection, committing on success.
+
+    When the connection was opened and closed per write, a failed statement was
+    discarded along with the connection. Now that the handle is reused, a failure
+    has to be rolled back explicitly or it would leave an open transaction that
+    poisons every later write on this thread. If the rollback itself fails the
+    connection is unusable, so it is dropped and the next call reopens.
+    """
+    conn = _get_conn()
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            try:
+                conn.close()
+            except Exception:
+                pass
+            _local.conn = None
+        raise
 
 
 def log_slip_prepared(
@@ -96,9 +148,8 @@ def log_slip_prepared(
     time_to_event_seconds: int | None = None,
 ) -> None:
     # INSERT a new row — status starts as 'prepared' and is updated later on confirm/expire.
-    prepared_at = datetime.now(timezone.utc).isoformat()
-    conn = _get_conn()
-    try:
+    prepared_at = datetime.now(UTC).isoformat()
+    with _write() as conn:
         conn.execute(
             """
             INSERT INTO bets (
@@ -113,37 +164,26 @@ def log_slip_prepared(
                 market_id, event_id, event_start_time, time_to_event_seconds,
             ),
         )
-        conn.commit()
-    finally:
-        conn.close()
 
 
 def log_bet_confirmed(slip_id: str, time_to_confirm_ms: int | None) -> None:
     # UPDATE the existing row rather than inserting — all the bet details are already there.
-    confirmed_at = datetime.now(timezone.utc).isoformat()
-    conn = _get_conn()
-    try:
+    confirmed_at = datetime.now(UTC).isoformat()
+    with _write() as conn:
         conn.execute(
             "UPDATE bets SET status='confirmed', confirmed_at=?, time_to_confirm_ms=? WHERE slip_id=?",
             (confirmed_at, time_to_confirm_ms, slip_id),
         )
-        conn.commit()
-    finally:
-        conn.close()
 
 
 def log_slip_expired(slip_id: str) -> None:
     # UPDATE the existing row — slip timed out before the user confirmed.
-    expired_at = datetime.now(timezone.utc).isoformat()
-    conn = _get_conn()
-    try:
+    expired_at = datetime.now(UTC).isoformat()
+    with _write() as conn:
         conn.execute(
             "UPDATE bets SET status='expired', expired_at=? WHERE slip_id=?",
             (expired_at, slip_id),
         )
-        conn.commit()
-    finally:
-        conn.close()
 
 
 def log_failure(
@@ -154,16 +194,12 @@ def log_failure(
     event_id: str | None = None,
 ) -> None:
     # INSERT into the separate failures table — these requests never produced a slip.
-    timestamp = datetime.now(timezone.utc).isoformat()
-    conn = _get_conn()
-    try:
+    timestamp = datetime.now(UTC).isoformat()
+    with _write() as conn:
         conn.execute(
             "INSERT INTO failures (timestamp, reason, selection_name, stake, market_id, event_id) VALUES (?, ?, ?, ?, ?, ?)",
             (timestamp, reason, selection_name, stake, market_id, event_id),
         )
-        conn.commit()
-    finally:
-        conn.close()
 
 
 def log_search(
@@ -179,9 +215,8 @@ def log_search(
 ) -> int:
     # INSERT one row per search query — booleans coerced to 0/1. Returns the new
     # row's id so the frontend can attach a thumbs up/down rating to it later.
-    timestamp = datetime.now(timezone.utc).isoformat()
-    conn = _get_conn()
-    try:
+    timestamp = datetime.now(UTC).isoformat()
+    with _write() as conn:
         cur = conn.execute(
             """
             INSERT INTO searches (
@@ -194,20 +229,14 @@ def log_search(
                 total_latency_ms, llm_latency_ms, cards, events, int(salvaged),
             ),
         )
-        conn.commit()
-        return cur.lastrowid
-    finally:
-        conn.close()
+        row_id = cur.lastrowid
+    return row_id
 
 
 def log_search_feedback(search_id: int, correct: bool) -> None:
     # UPDATE the existing search row with the user's rating (1 = up, 0 = down).
-    conn = _get_conn()
-    try:
+    with _write() as conn:
         conn.execute(
             "UPDATE searches SET feedback=? WHERE id=?",
             (int(correct), search_id),
         )
-        conn.commit()
-    finally:
-        conn.close()
