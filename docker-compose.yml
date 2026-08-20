@@ -1,0 +1,18 @@
+# Run the app with `docker compose up`. Requires a .env file in this directory —
+# copy .env.example and fill it in first.
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file: .env
+    volumes:
+      # The bet database and model traces live here. Without this mount they are
+      # lost when the container is removed.
+      #
+      # The container runs as uid 10001. On Linux a bind-mounted host directory
+      # keeps its host ownership, so if the app cannot write here, run:
+      #   sudo chown -R 10001:10001 ./logs
+      # Docker Desktop (macOS/Windows) handles this for you.
+      - ./logs:/app/logs
+    restart: unless-stopped

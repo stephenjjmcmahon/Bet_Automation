@@ -12,8 +12,16 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Config comes from the environment (see .env.example) — no secrets are baked in.
-# SQLite logs and the interpreter trace land here; mount a volume to keep them.
-RUN mkdir -p logs
+#
+# The app creates logs/ lazily on first write (backend/services/logger.py), so the
+# runtime user has to own the working directory. That directory holds the SQLite bet
+# database and the interpreter traces, and it is ephemeral unless mounted — see the
+# volume in docker-compose.yml.
+RUN useradd --create-home --uid 10001 appuser \
+    && mkdir -p logs \
+    && chown -R appuser:appuser /app
+
+USER appuser
 
 EXPOSE 8000
 
