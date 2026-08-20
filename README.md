@@ -42,7 +42,8 @@ priced, one-click-bettable cards.
 | Exchange | Betfair Exchange API (`listEvents`, `listMarketCatalogue`, `listMarketBook`, `placeOrders`) |
 | Frontend | Single-file vanilla JS + HTML, served by the backend at `/` |
 | Storage | SQLite (bet lifecycle + analytics), JSONL (model traces) |
-| Tests | pytest — 146 tests, fully mocked, no network |
+| Tests | pytest — 206 tests, fully mocked, no network |
+| Lint | ruff (lint + import order), enforced in CI |
 
 ---
 
@@ -170,13 +171,22 @@ pytest
 
 The suite is fully mocked: no network calls, no Betfair session, and no bets placed.
 
+Lint with the same rules CI enforces (configured in [`pyproject.toml`](pyproject.toml)):
+
+```bash
+pip install -r requirements-dev.txt
+ruff check .
+```
+
 <details>
 <summary>Docker</summary>
 
 ```bash
-docker build -t betauto .
-docker run --env-file .env -p 8000:8000 betauto
+docker compose up
 ```
+
+Same port, same `.env`. `logs/` is mounted, so the bet database and model traces
+survive the container being removed; the image runs as an unprivileged user.
 </details>
 
 ### Configuration

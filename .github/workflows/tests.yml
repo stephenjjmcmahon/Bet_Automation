@@ -6,7 +6,30 @@ on:
   pull_request:
   workflow_dispatch:
 
+# A newer push to the same branch makes the in-flight run irrelevant — cancel it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install ruff
+        run: pip install -r requirements-dev.txt
+
+      # Config lives in pyproject.toml. Lint only for now — the formatter is not
+      # enforced, so this gates real defects rather than whitespace.
+      - name: Lint
+        run: ruff check --output-format=github .
+
   pytest:
     runs-on: ubuntu-latest
 
@@ -35,3 +58,33 @@ jobs:
 
       - name: Run tests
         run: pytest -q
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t betauto .
+
+      # Building proves the image assembles; running it proves the app actually
+      # starts. Dummy config only - the same values the pytest job uses to satisfy
+      # import-time validation. Nothing here reaches the network.
+      - name: Smoke test /health
+        env:
+          OPENAI_API_KEY: test-key-not-used
+          BETFAIR_APP_KEY: test-key-not-used
+          SESSION_SECRET_KEY: test-secret-not-used
+          APP_ENV: development
+        run: |
+          docker run -d --name smoke -p 8000:8000 -e OPENAI_API_KEY -e BETFAIR_APP_KEY -e SESSION_SECRET_KEY -e APP_ENV betauto
+          for _ in $(seq 1 20); do
+            if curl -fsS http://localhost:8000/health; then
+              echo "app is healthy"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "app did not become healthy within 20s"
+          docker logs smoke
+          exit 1
