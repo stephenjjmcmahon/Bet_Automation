@@ -1,34 +1,31 @@
-# BetAuto — a natural-language betting interface for the Betfair Exchange
+# BetAuto
+
+Natural-language betting on the Betfair Exchange.
 
 [![tests](https://github.com/stephenjjmcmahon/Bet_Automation/actions/workflows/tests.yml/badge.svg)](https://github.com/stephenjjmcmahon/Bet_Automation/actions/workflows/tests.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Type **"back Constitution Hill each way at Cheltenham, £20"** and the app parses it,
-finds the right race on the Betfair Exchange, matches the horse among thousands of
-runners, fetches a live price, checks there's enough liquidity to fill your stake,
-and hands you a confirmation slip. Confirm, and the bet goes on for real money via
-the Betfair API.
+Type `back Galopin Des Champs each way at Cheltenham, £20`. You get back a slip with
+the right race, the right horse and a live price. If there isn't enough money on the
+other side to fill £20, it says so instead of guessing. Confirm and the bet goes on
+through the Betfair API, for real money.
 
-The interesting part isn't the language model — it's everything between the parsed
-sentence and a placeable bet. Betfair's search API **cannot find a horse by name**,
-markets are named inconsistently across competitions, and "each way" means a
-different market type than "to win". Most of this repo is the resolution layer that
-closes that gap, and the tests that keep it honest.
+Parsing the sentence is the easy half. Betfair's search API can't find a horse by
+name, and market names differ between competitions, so most of the code here is the
+layer that turns a parsed sentence into a market id and a selection id that actually
+exist.
 
-There's also a conversational **search mode**: ask "what's on at Ascot today?" or
-just type "Scottie Scheffler", and an agent navigates the exchange and returns
-priced, one-click-bettable cards.
+There is also a search mode. Ask "what's on at Ascot today?", or just type a name
+like "Scottie Scheffler", and an agent walks the exchange and comes back with priced
+cards you can bet in one click.
 
----
+![The BetAuto input box with the text "£10 on Arsenal to beat Chelsea" typed in, example prompt chips underneath, and an empty bet slip panel on the right](docs/screenshots/bet-input.png)
 
-## Screenshots
+![The same screen after parsing: the right panel now shows a bet slip for Arsenal v Chelsea, English Premier League, MATCH_ODDS, back at 1.73 for £10, £17.30 potential return](docs/screenshots/bet-slip.png)
 
-<!-- TODO: capture these against a live session and drop them in docs/screenshots/.
-     Three shots tell the story: the NL input box, a confirmation slip, a search result. -->
-
-| Natural-language bet | Confirmation slip | Conversational search |
-|---|---|---|
-| _screenshot pending_ | _screenshot pending_ | _screenshot pending_ |
+The same screen before and after. "£10 on Arsenal to beat Chelsea" resolves to a real
+market and gets priced against the live book. The "2 more" badge is the other two
+ranked candidates, and nothing is placed until you confirm.
 
 ---
 
@@ -37,17 +34,19 @@ priced, one-click-bettable cards.
 | Layer | Choice |
 |---|---|
 | Backend | FastAPI + Uvicorn |
-| Parsing | OpenAI `gpt-4o` (structured outputs) |
-| Ranking / matching | OpenAI `gpt-4o-mini` |
+| Parsing | OpenAI `gpt-4o`, structured outputs |
+| Ranking and fuzzy matching | OpenAI `gpt-4o-mini` |
 | Exchange | Betfair Exchange API (`listEvents`, `listMarketCatalogue`, `listMarketBook`, `placeOrders`) |
-| Frontend | Single-file vanilla JS + HTML, served by the backend at `/` |
-| Storage | SQLite (bet lifecycle + analytics), JSONL (model traces) |
-| Tests | pytest — 206 tests, fully mocked, no network |
-| Lint | ruff (lint + import order), enforced in CI |
+| Frontend | One HTML file, vanilla JS, served by the backend at `/` |
+| Storage | SQLite for the bet lifecycle, JSONL for model traces |
+| Tests | pytest, 206 tests, fully mocked, no network |
+| Accuracy | offline eval harness (`python -m backend.eval`) |
+| Lint | ruff, enforced in CI |
+| Deployment | Docker and compose; CI builds the image and smoke-tests `/health` |
 
 ---
 
-## Architecture
+## How a bet gets placed
 
 ```mermaid
 flowchart TD
@@ -67,76 +66,138 @@ flowchart TD
     K --> L["place_orders → Betfair"]
 ```
 
-The full end-to-end flow, step by step:
-
-1. **Classify** — is this a bet instruction or a search query?
-2. **Parse** — `gpt-4o` with structured outputs produces a `ParsedBet` (selection,
-   sport, side, stake, market type, line, opponent, competition). Missing required
-   fields return a `clarification_needed` response rather than a guess.
-3. **Find events** — head-to-head sports search Betfair by text; competition sports
-   (golf, racing, motor sport, politics) fetch all events, because there's no
-   meaningful head-to-head name to search by.
-4. **Pick event + market** — `gpt-4o-mini` ranks candidates against the available
-   market types and returns up to three `{event_id, market_type}` pairs.
-5. **Resolve market** — turn that into a real `marketId` + `selectionId`, with fuzzy
-   runner-name matching and an AI fallback when substring matching fails.
-6. **Price + liquidity check** — fetch the live book, take top-of-book for the
-   requested side, and reject the slip unless the available size covers the stake.
-7. **Confirm** — the stake is re-validated against a fresh book before the order is
-   sent, then `placeOrders` runs and the result is checked properly (Betfair returns
-   HTTP 200 for rejected bets — the real outcome is in the response body).
+1. **Classify.** Bet instruction, or search query?
+2. **Parse.** `gpt-4o` with structured outputs returns a `ParsedBet`: selection,
+   sport, side, stake, market type, line, opponent, competition. A missing required
+   field gets a follow-up question rather than a guess.
+3. **Find events.** Head-to-head sports get a text search. Competition sports (golf,
+   racing, motor sport, politics) have no useful head-to-head name to search on, so
+   they pull the full event list for the sport.
+4. **Pick the event and market.** `gpt-4o-mini` ranks the candidates against the
+   market types Betfair actually offers and returns up to three
+   `{event_id, market_type}` pairs.
+5. **Resolve.** Turn that into a real `marketId` and `selectionId`, matching runner
+   names fuzzily, with an AI fallback when substring matching comes back empty.
+6. **Price and liquidity.** Fetch the live book, take top of book for the side you
+   want, and refuse the slip unless the size available covers the stake.
+7. **Confirm.** The stake is re-checked against a fresh book, then `placeOrders` runs
+   and the response body gets read properly.
 
 ---
 
-## Interesting problems solved
+## The hard parts
 
-**Betfair cannot search for a horse.** `listEvents` `textQuery` matches event and
-competition names only — never runner names. Betfair models racing as *event =
-meeting*, *market = race*, *runner = horse*, so "Constitution Hill" is invisible to
-every search endpoint. The resolver instead pulls **every** upcoming market of the
-requested type in one bulk call (~450 on a busy day) and scans all runners for the
-name. A horse runs at most once a day, so a clean match identifies the race
-outright — no AI needed for the common case. Ambiguity (same greyhound name at two
-tracks) returns multiple slips; too many matches asks which meeting.
+### Betfair can't search for a horse
 
-**Exact matching has to beat fuzzy across two pools at once.** A horse entered only
-for a future race has no win market yet, so "to win the Gold Cup" finds nothing in
-the win scan and has to fall back to ante-post markets. The subtle part is
-precedence: a festival usually *does* have win markets for its other races, so
-scanning pools in a fixed order biases wrong in both directions — win-pool-first
-hallucinates a wrong horse from today's card, ante-post-first does the reverse. The
-fix is to try exact matching on both pools first, then run a **single** fuzzy pass
-over the *combined* pool so the model sees every real candidate at once and picks
-the globally closest.
+`listEvents` matches event and competition names, never runner names, and Betfair
+models racing as event = meeting, market = race, runner = horse. "Constitution Hill"
+is invisible to every search endpoint it exposes.
 
-**Trusting the model's `selection_id`, not its `market_id`.** Ante-post two-year-olds
-commonly hold two or three engagements — the same horse entered in the Windsor Castle
-*and* the Chesham. Asked to return a market and a selection, the model reliably
-cross-wires them: market from one race, selection from another, producing a slip that
-would place a bet on the wrong race. So the AI's answer is used only to recover the
-runner's *name*, and the pool is then re-scanned deterministically for that name.
-Market and selection can no longer disagree.
+The resolver pulls every upcoming market of the requested type in one bulk call,
+around 450 on a busy day, and scans all the runners for the name. A horse runs at
+most once a day, so a clean hit identifies the race with no model involved. Two
+tracks with the same greyhound name gives a slip for each; more hits than that and it
+asks which meeting you meant.
 
-**The same trick, applied to tournaments.** A participant who appears only as a
-*runner* inside a competition-level market ("England" inside "FIFA World Cup") is
-invisible to a name search for exactly the same reason a horse is. The search agent
-reuses the runner-scan pattern over an allowlist of outright market types, so
-searching "Scottie Scheffler" surfaces his winner, top-10, and make-cut markets
+### The ante-post fallback
+
+A horse entered only for a future race has no win market yet, so "to win the Gold
+Cup" finds nothing in the win scan.
+
+Order matters more than it looks here. A festival usually does have win markets for
+its other races, so whichever pool gets scanned first biases the answer: win-first
+invents a plausible horse from today's card, ante-post-first does the reverse. Both
+pools get an exact pass, then one fuzzy pass runs over the two combined, so the model
+sees every real candidate at once.
+
+### Cross-wired market and selection ids
+
+Ante-post two-year-olds often hold two or three engagements, the same horse entered
+in the Windsor Castle and the Chesham. Ask a model for a market and a selection in
+one answer and it will cross-wire them, handing back a market from one race and a
+selection from another. The slip looks perfectly fine and puts the money on the wrong
+race.
+
+The model's answer is now used for one thing only, recovering the runner's name, and
+the pool is re-scanned deterministically for it.
+
+### Tournament outrights
+
+Someone who appears only as a runner inside a competition-level market, England
+inside "FIFA World Cup", is invisible to a name search for the same reason a horse
+is. The search agent reuses the runner scan over an allowlist of outright market
+types, so "Scottie Scheffler" turns up his winner, top-10 and make-cut markets
 alongside his fixtures.
 
-**Two models, chosen by job.** `gpt-4o` handles parsing, where a detailed prompt and
-guaranteed JSON schema matter. `gpt-4o-mini` handles ranking and fuzzy name matching,
-which are cheaper, simpler, higher-volume tasks — and has far more tokens-per-minute
-headroom, which matters when a broad query pulls in a full day's racing. One
-consequence needed guarding: the parser applies the full market-type rules, so when
-it emits a code Betfair actually offers, that code is **pinned** onto the lighter
-model's picks. Without the pin, `gpt-4o-mini` kept "correcting" rugby's head-to-head
-market — whose real Betfair code is the literal string `UNUSED` — to `MATCH_ODDS`,
-because `UNUSED` reads like a junk value.
+### Two models
 
-**Betfair's 200 doesn't mean yes.** `placeOrders` returns HTTP 200 for rejected bets;
-the real status is in the `PlaceExecutionReport` body. Reporting success on the HTTP
-code alone tells a user their bet is on when it isn't.
+`gpt-4o` parses, where a long prompt and a guaranteed JSON schema earn their cost.
+`gpt-4o-mini` handles ranking and fuzzy name matching: simpler, much higher volume,
+and it has the tokens-per-minute headroom for when a broad query drags in a whole
+day's racing.
+
+One guard was needed. When the parser emits a market-type code Betfair really does
+offer, that code is pinned onto the smaller model's picks, because `gpt-4o-mini` kept
+"correcting" rugby's head-to-head market to `MATCH_ODDS`. Its real Betfair code is
+the literal string `UNUSED`.
+
+### placeOrders returns 200 for rejected bets
+
+The real status is in the `PlaceExecutionReport` body. Reporting success on the
+status code alone tells someone their money is down when it isn't.
+
+---
+
+## Evals
+
+```bash
+python -m backend.eval match
+python -m backend.eval parses
+```
+
+Both offline and deterministic, with no network calls.
+
+`match` runs every strategy in `eval/matchers.py` over a 21-case corpus, 17 of them
+real inputs from the logs. It scores fixes and regressions against a baseline rather
+than reporting a bare pass rate, and the baseline is a frozen copy of the matcher I
+replaced, so a revert fails the build.
+
+| matcher | passed | fixes | regressions |
+|---|---|---|---|
+| `legacy_loose` (baseline) | 15/21 | | |
+| `exact_first` | 18/21 | 3 | 0 |
+| `current` (shipped) | 21/21 | 6 | 0 |
+
+The runner lists in the corpus are reconstructions, so this is a regression metric
+rather than a field accuracy figure. Some cases expect "no confident match", since an
+ambiguous request belongs with the AI fallback.
+
+`parses` reads `logs/interpreter.jsonl` (582 entries, 553 successful parses at the
+last run) and asks the app's own mapping what each label resolves to, so it can't
+disagree with the code it audits. Three of the 553 hit a gap the matcher can't fix.
+
+It caught a real bug too. `racing_market_for` used to fall back to a win bet for any
+label it didn't recognise, and the log held two "top 3" requests that would have gone
+on as win bets; it raises now.
+
+---
+
+## Performance
+
+Four things carry most of the latency budget:
+
+- One pooled `requests.Session` for every Betfair call, so the TLS handshake is paid
+  once rather than per request.
+- A 45-second process-level cache over the two scan-everything catalogue fetches. A
+  clarification retry re-runs the same 450-market scan seconds later, and the cache
+  collapses that to nothing. `BETFAIR_CATALOGUE_TTL=0` turns it off.
+- The independent per-candidate chains run in parallel. Anything touching the user's
+  session stays on the calling thread, because a concurrent read-modify-write of the
+  session dict silently drops pending slips, which is why resolution is parallel and
+  slip building isn't.
+- One SQLite connection per thread, rather than open-and-close on every write.
+
+`test_performance_paths.py` and `test_logger_connection.py` hold all four in place.
 
 ---
 
@@ -162,16 +223,19 @@ Run it:
 uvicorn backend.main:app --reload
 ```
 
-The app is served at <http://localhost:8000> — sign in with your Betfair credentials
-on the overlay. Run the tests with:
+It serves at <http://localhost:8000>. Sign in with your Betfair credentials on the
+overlay.
+
+Tests:
 
 ```bash
 pytest
 ```
 
-The suite is fully mocked: no network calls, no Betfair session, and no bets placed.
+Fully mocked. Nothing reaches the network, no Betfair session is opened, and no bets
+are placed.
 
-Lint with the same rules CI enforces (configured in [`pyproject.toml`](pyproject.toml)):
+Lint with the same rules CI enforces, configured in [`pyproject.toml`](pyproject.toml):
 
 ```bash
 pip install -r requirements-dev.txt
@@ -185,8 +249,9 @@ ruff check .
 docker compose up
 ```
 
-Same port, same `.env`. `logs/` is mounted, so the bet database and model traces
-survive the container being removed; the image runs as an unprivileged user.
+Same port, same `.env`. `logs/` is mounted so the bet database and model traces
+survive the container being removed, and the image runs as an unprivileged user. CI
+builds the image on every push and hits `/health` to prove it actually starts.
 </details>
 
 ### Configuration
@@ -200,56 +265,25 @@ Every key is documented in [`.env.example`](.env.example). The ones worth knowin
 | `ALLOWED_ORIGINS` | `http://localhost:8000` | CORS allowlist |
 | `LOG_LEVEL` | `INFO` | `DEBUG` gives the full parse/resolve trace |
 | `AI_RATE_LIMIT` | `30/minute` | Per-IP cap on the OpenAI-backed endpoints |
+| `LOGIN_RATE_LIMIT` | `10/minute` | Per-IP cap on `/api/login` |
+| `BETFAIR_CATALOGUE_TTL` | `45` | Bulk-catalogue cache lifetime in seconds; `0` disables it |
 
 ---
 
 ## Security notes
 
-This is a personal project designed to run locally. Known limitations, stated
-deliberately rather than overlooked:
+A personal project meant to run locally. Known limitations:
 
-- **The Betfair session token lives in a signed — not encrypted — cookie.**
-  Starlette's `SessionMiddleware` prevents tampering, not disclosure, so the token is
-  base64-readable by anyone who can read the cookie. The correct fix is server-side
-  session storage with an opaque session id; that's out of scope for a
-  single-process local app. See the note in `backend/services/betfair_auth.py`.
-- **Stakes are capped** at `MAX_STAKE_GBP` (default £100) and re-validated against a
-  live market book at confirm time, so an edited stake can't bypass the liquidity
-  gate it was originally checked against.
-- **Rate limits are in-memory**, so they're per-process and reset on restart. A
-  multi-worker deployment would need a shared backend (Redis).
-- **Credentials are never persisted.** They're posted straight to Betfair's SSO and
-  only the returned token is kept, for the life of the session.
+- **The Betfair session token lives in a signed cookie, not an encrypted one.**
+  Starlette's `SessionMiddleware` stops tampering, not reading, so the token is
+  base64-readable by anyone who can read the cookie. The right fix is server-side
+  session storage behind an opaque id, which is more than a single-process local app
+  needs. There's a note about it in `backend/services/betfair_auth.py`.
+- **Stakes are capped** at `MAX_STAKE_GBP` and re-validated against a live book at
+  confirm time, so editing the stake box after the slip appears can't get round the
+  liquidity check it originally passed.
+- **Rate limits are in-memory**, so they're per-process and reset on restart. Running
+  multiple workers would need a shared backend such as Redis.
+- **Credentials are never persisted.** They go straight to Betfair's SSO and only the
+  returned token is kept, for the life of the session.
 - `.env` is gitignored and has never been committed.
-
----
-
-## Disclaimer
-
-This is a personal and educational project. **It places real bets with real money on
-a live betting exchange.** It is provided as-is, with no warranty; use it at your own
-risk, and read the code before pointing it at an account you care about. Nothing here
-is financial or betting advice, and no part of it predicts outcomes or claims an edge.
-
-Gambling can be addictive. If it's stopping being fun, free and confidential support
-is available:
-
-- **UK** — [GamCare](https://www.gamcare.org.uk), National Gambling Helpline 0808 8020 133
-- **Ireland** — [Gambling Care](https://www.gamblingcare.ie), 089 241 5401
-- **International** — [Gamblers Anonymous](https://www.gamblersanonymous.org)
-
----
-
-## Credits
-
-Built by [Stephen McMahon](https://github.com/stephenjjmcmahon).
-
-Early work on this project was done together with **James McNamee**
-([jamesmcnamee8255](https://gitlab.com/jamesmcnamee8255)), who contributed the
-original frontend, the first version of the bet-slip construction, and a good part
-of the AI interpreter's prompt design — much of which is still in the codebase today.
-
-Market data and bet placement via the
-[Betfair Exchange API](https://betfair-developer-docs.atlassian.net/wiki/spaces/1smk3cen4v3lu3yomq5qye0ni/overview).
-A full reference of the market types this app handles is in
-[`docs/Market_Types.md`](docs/Market_Types.md).

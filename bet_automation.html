@@ -213,16 +213,16 @@ input,textarea,select{font:inherit;color:inherit}
       <div class="panel">
         <div class="panel-header">
           <i data-lucide="message-square" style="width:16px;height:16px;color:var(--color-text-muted)"></i>
-          <div><div class="panel-title">Place a Bet or Search</div><div class="panel-subtitle">Place a bet or explore markets in plain English — Cmd+Enter</div></div>
+          <div><div class="panel-title">Place a Bet or Search</div><div class="panel-subtitle">Place a bet or explore markets in plain English. Ctrl+Enter (⌘+Enter on Mac)</div></div>
         </div>
         <div class="panel-body">
-          <textarea class="bet-input" id="bet-input" placeholder="e.g. Chelsea to win £50 at 2.4" rows="3" aria-label="Enter your bet"></textarea>
+          <textarea class="bet-input" id="bet-input" placeholder="e.g. Chelsea to win £50" rows="3" aria-label="Enter your bet"></textarea>
           <div class="input-hint">
             <span style="color:var(--color-text-faint)">Try:</span>
-            <span class="hint-chip" onclick="fillExample(this)">Chelsea 50 at 2.4</span>
-            <span class="hint-chip" onclick="fillExample(this)">Back Man United £25 at 3.5</span>
-            <span class="hint-chip" onclick="fillExample(this)">Lay Arsenal 100 at 4.0</span>
-            <span class="hint-chip" onclick="fillExample(this)">Show me the World Cup markets today</span>
+            <span class="hint-chip" onclick="fillExample(this)">Chelsea £50</span>
+            <span class="hint-chip" onclick="fillExample(this)">Back Man United £25</span>
+            <span class="hint-chip" onclick="fillExample(this)">Lay Arsenal £100</span>
+            <span class="hint-chip" onclick="fillExample(this)">Back Rory McIlroy to win the Masters £20</span>
             <span class="hint-chip" onclick="fillExample(this)">Over/under lines in tonight's games</span>
           </div>
           <button class="btn-parse" id="parse-btn" onclick="parseBet()">
@@ -327,14 +327,14 @@ async function apiFetch(url, options = {}) {
   options.credentials = 'include';
   const res = await fetch(url, options);
   if (res.status === 401) {
-    showLoginPrompt('Your session has expired — please sign in again.');
+    showLoginPrompt('Your session has expired. Please sign in again.');
     throw new Error('session_expired');
   }
   // The rate limiter replies with {"error": ...} rather than the {"detail": ...}
   // the rest of the API uses, so translate it here instead of letting callers
   // render "undefined".
   if (res.status === 429) {
-    throw new Error('Too many requests — please wait a moment and try again.');
+    throw new Error('Too many requests. Please wait a moment and try again.');
   }
   return res;
 }
@@ -550,7 +550,7 @@ function renderSearchResults(reply, cards, navEvents, searchId) {
   // The reply carries the answer (incl. "nothing on"); only add a fallback banner
   // when there are no markets, no events, AND no reply text.
   if (!groups.length && !navEvents.length && !(reply && reply.trim())) {
-    html += `<div class="banner banner-info" style="margin-top:var(--space-3)"><span>No results to show — try a different or narrower query.</span></div>`;
+    html += `<div class="banner banner-info" style="margin-top:var(--space-3)"><span>No results to show. Try a different or narrower query.</span></div>`;
   }
 
   // Navigable events (no prices) — grouped by competition. Used for broad queries
@@ -783,7 +783,7 @@ async function renderFixturePicker(partialBet, question) {
     renderFixtureCards(data.fixtures || [], team);
   } catch(e) {
     const wrap = document.getElementById('fixture-list-wrap');
-    if (wrap) wrap.innerHTML = '<div style="font-size:var(--text-xs);color:var(--color-text-muted);padding:var(--space-2) 0">Could not load fixtures — enter your stake to proceed.</div>';
+    if (wrap) wrap.innerHTML = '<div style="font-size:var(--text-xs);color:var(--color-text-muted);padding:var(--space-2) 0">Could not load fixtures. Enter your stake to proceed.</div>';
     showStakeClarify();
   }
 }
@@ -791,7 +791,7 @@ async function renderFixturePicker(partialBet, question) {
 function renderFixtureCards(fixtures, team) {
   const wrap = document.getElementById('fixture-list-wrap');
   if (!fixtures.length) {
-    wrap.innerHTML = '<div style="font-size:var(--text-xs);color:var(--color-text-muted);padding:var(--space-2) 0">No upcoming fixtures found — enter your stake to proceed.</div>';
+    wrap.innerHTML = '<div style="font-size:var(--text-xs);color:var(--color-text-muted);padding:var(--space-2) 0">No upcoming fixtures found. Enter your stake to proceed.</div>';
     showStakeClarify(); return;
   }
   let html = '<div class="fixture-list" id="fixture-list">';
@@ -918,7 +918,7 @@ function renderSlip(p) {
     </div>
     <div class="slip-body">
       <div class="slip-selection">${p.event_name || p.selection_name}</div>
-      <div style="font-size:var(--text-sm);color:var(--color-text-muted);margin-top:var(--space-1)">Betting on: <strong>${p.runner_name || p.selection_name}${p.line != null ? ' ' + p.line : ''}</strong>${p.market_type && p.market_type.endsWith('_LINE') ? ' <span style="font-size:var(--text-xs);color:var(--color-text-faint)">(Line market — Back = Under, Lay = Over, all bets settle at 2.0)</span>' : ''}</div>
+      <div style="font-size:var(--text-sm);color:var(--color-text-muted);margin-top:var(--space-1)">Betting on: <strong>${p.runner_name || p.selection_name}${p.line != null ? ' ' + p.line : ''}</strong>${p.market_type && p.market_type.endsWith('_LINE') ? ' <span style="font-size:var(--text-xs);color:var(--color-text-faint)">(Line market: Back = Under, Lay = Over, all bets settle at 2.0)</span>' : ''}</div>
       <div class="slip-row">
         <div class="slip-field"><span class="slip-field-label">Bet Type</span><span class="slip-field-value">${p.side === 'BACK' ? 'Back' : 'Lay'}</span></div>
         <div class="slip-field"><span class="slip-field-label">Start Time</span><span class="slip-field-value" style="font-size:var(--text-sm)">${startTime}</span></div>
@@ -1080,7 +1080,7 @@ function submitBadFeedback() {
   const note = (document.getElementById('feedback-note') || {}).value || '';
   const w = document.getElementById('feedback-note-wrap'); if (w) w.remove();
   sendFeedback(false, note);
-  showFeedbackSent('Feedback logged — thank you!');
+  showFeedbackSent('Feedback logged, thank you!');
 }
 
 function showFeedbackSent(msg) {
